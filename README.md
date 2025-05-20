@@ -129,7 +129,7 @@
 - 成员列表支持移除、权限变更
 
 <p align="center">
-  <img src="images/permission.svg" alt="权限与成员管理原型" width="350" />
+  <img src="images/permission.svg" alt="权限与成员管理原型" width="600" />
 </p>
 
 #### （登录界面）

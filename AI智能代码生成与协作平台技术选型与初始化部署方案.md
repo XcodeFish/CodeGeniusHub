@@ -46,7 +46,6 @@
   "passport-jwt": "^4.0.1",
   "class-validator": "^0.14.0",
   "class-transformer": "^0.5.1",
-  "express-rate-limit": "^7.0.0",
   "axios": "^1.6.0",
   "dotenv": "^16.0.0"
 },
@@ -91,14 +90,14 @@
 
 ```bash
 # 安装Nest CLI
-npm i -g @nestjs/cli
+pnpm i -g @nestjs/cli
 
 # 创建项目
 nest new backend
 cd backend
 
 # 安装依赖
-npm install @nestjs/websockets @nestjs/platform-socket.io @nestjs/mongoose mongoose @nestjs/jwt passport passport-jwt class-validator class-transformer express-rate-limit axios dotenv
+pnpm install @nestjs/websockets @nestjs/platform-socket.io @nestjs/mongoose mongoose @nestjs/jwt passport passport-jwt class-validator class-transformer  axios dotenv
 ```
 
 ### 2. 前端（Next.js + Antd + Monaco Editor）
@@ -109,7 +108,7 @@ npx create-next-app@latest frontend --typescript
 cd frontend
 
 # 安装依赖
-npm install monaco-editor @monaco-editor/react socket.io-client antd axios
+pnpm install monaco-editor @monaco-editor/react socket.io-client antd axios
 ```
 
 ---
@@ -122,7 +121,7 @@ npm install monaco-editor @monaco-editor/react socket.io-client antd axios
 - 安装pm2（进程管理）：
 
   ```bash
-  npm install -g pm2
+  pnpm install -g pm2
   ```
 
 ### 2. 后端部署
@@ -130,9 +129,9 @@ npm install monaco-editor @monaco-editor/react socket.io-client antd axios
 - 构建NestJS项目：
 
   ```bash
-  npm run build
+  pnpm run build
   pm2 start dist/main.js --name backend
-  # 或直接用 pm2 start npm --name backend -- run start:prod
+  # 或直接用 pm2 start pnpm --name backend -- run start:prod
   ```
 
 ### 3. 前端部署
@@ -140,15 +139,15 @@ npm install monaco-editor @monaco-editor/react socket.io-client antd axios
 - Next.js SSR部署（推荐）：
 
   ```bash
-  npm run build
-  pm2 start npm --name frontend -- run start
+  pnpm run build
+  pm2 start pnpm --name frontend -- run start
   ```
 
 - Next.js静态导出（如纯前端SPA）：
 
   ```bash
-  npm run build
-  npm run export
+  pnpm run build
+  pnpm run export
   # 将 out 目录内容部署到Nginx或静态服务器
   ```
 

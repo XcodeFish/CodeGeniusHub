@@ -19,6 +19,7 @@ import { Roles } from '../../common/decorators/roles.decorator'; // 引入Roles�
 import { UpdateUserDto, CreateUserDto } from './dto/user.dto'; // 引入UpdateUserDto和CreateUserDto
 import { User, UserDocument } from './schemas/user.schema'; // 引入User Schema
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger'; // 引入swagger装饰器
+import { USER_ERROR } from '../../common/constants/error-codes';
 
 @Controller('user') // 定义基础路由 /user
 @ApiTags('用户模块')
@@ -147,17 +148,17 @@ export class UserController {
       );
 
       if (!deletedUser) {
-        throw new NotFoundException(`找不到ID为 ${id} 的用户`);
+        throw new NotFoundException(USER_ERROR.NOT_FOUND);
       }
 
       return { message: `用户ID ${id} 删除成功` };
     } catch (error) {
       // 捕获Service中抛出的权限不足错误
-      if (error.message === '权限不足！') {
-        throw new ForbiddenException('您没有权限删除用户');
+      if (error.message === USER_ERROR.FORBIDDEN) {
+        throw new ForbiddenException(USER_ERROR.FORBIDDEN);
       }
       // 捕获其他潜在错误
-      throw new InternalServerErrorException('删除用户失败');
+      throw new InternalServerErrorException(USER_ERROR.INTERNAL);
     }
   }
 

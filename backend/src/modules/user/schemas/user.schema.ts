@@ -21,10 +21,10 @@ export class User {
   @Prop({ required: true })
   password: string; // 存储加密后的密码
 
-  @Prop({ required: true, unique: true, sparse: true }) // 用户名可选，但如果存在则唯一
+  @Prop({ required: true, unique: true, sparse: true }) // 用户名必填
   username: string;
 
-  @Prop({ required: true, unique: true, sparse: true }) // 手机号可选，如果存在则唯一
+  @Prop({ required: true, unique: true, sparse: true }) // 手机号必填
   phone: string;
 
   @Prop({ required: true, default: Permission.VIEWER }) // 默认权限为Viewer

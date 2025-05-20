@@ -6,6 +6,9 @@ import { ROLES_KEY } from '../decorators/roles.decorator'; // 引入装饰器中
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
+  // 新增权限字段名常量
+  private readonly USER_PERMISSION_FIELD = 'permission';
+
   canActivate(context: ExecutionContext): boolean {
     // 获取路由上设置的roles
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(
@@ -24,6 +27,8 @@ export class RolesGuard implements CanActivate {
     // 检查用户是否有所需的roles中的任意一个
     // 这里假设用户权限存储在 user.permission 属性中
     // 你可能需要根据你的实际用户对象结构调整这里的逻辑
-    return requiredRoles.some((role) => user.permission === role);
+    return requiredRoles.some(
+      (role) => user[this.USER_PERMISSION_FIELD] === role,
+    );
   }
 }

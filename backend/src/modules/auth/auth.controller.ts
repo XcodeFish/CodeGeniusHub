@@ -26,6 +26,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { AUTH_ERROR } from '../../common/constants/auth-error-codes';
 
 @Controller('auth')
 @ApiTags('认证模块')
@@ -188,7 +189,7 @@ export class AuthController {
     const oldRefreshToken = req.cookies?.refreshToken;
 
     if (!oldRefreshToken) {
-      throw new UnauthorizedException('Refresh token not found');
+      throw new UnauthorizedException(AUTH_ERROR.REFRESH_TOKEN_NOT_FOUND);
     }
 
     const { accessToken } = await this.authService.refreshToken(

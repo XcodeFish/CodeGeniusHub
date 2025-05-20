@@ -1,9 +1,14 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/user.dto';
 import * as bcrypt from 'bcrypt'; // 引入bcrypt用于密码哈希
+import { isValidObjectId } from 'mongoose';
 
 @Injectable()
 export class UserService {
@@ -108,6 +113,11 @@ export class UserService {
     updateData: Partial<User>,
     requesterPermission: string,
   ): Promise<User | null> {
+    // 新增ObjectId格式校验
+    if (!isValidObjectId(id)) {
+      throw new BadRequestException('用户ID格式不正确');
+    }
+
     // 如果请求方不是admin，且试图修改permission字段，则阻止
     if (requesterPermission !== 'admin' && updateData.permission) {
       // 忽略非admin用户的permission修改尝试

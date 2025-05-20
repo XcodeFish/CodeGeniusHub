@@ -1,6 +1,13 @@
 // 用户信息相关的 DTO
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsEmail, MinLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsBoolean,
+  IsEmail,
+  MinLength,
+} from 'class-validator';
 
 export class UserDto {
   @ApiProperty({ description: '用户唯一ID', example: 'uuid-xxx' })
@@ -43,24 +50,27 @@ export class UserDto {
 }
 
 export class CreateUserDto {
+  @ApiProperty({ description: '邮箱', example: 'user@example.com' })
   @IsEmail()
-  email: string; // 邮箱，使用IsEmail进行格式校验
+  @IsNotEmpty({ message: '邮箱不能为空' })
+  email: string; // 邮箱，必填
 
-  @IsOptional() // 用户名
+  @ApiProperty({ description: '用户名', example: 'user123' })
   @IsString()
-  username: string; // 用户名
+  @IsNotEmpty({ message: '用户名不能为空' })
+  username: string; // 用户名，必填
 
-  @IsOptional() // 手机号可选
+  @ApiProperty({ description: '手机号', example: '13211223322' })
   @IsString()
-  phone: string; // 手机号
+  @IsNotEmpty({ message: '手机号不能为空' })
+  phone: string; // 手机号，必填
 
+  @ApiProperty({ description: '密码', example: 'password123' })
   @IsString()
-  @MinLength(6) // 密码最小长度为6
+  @MinLength(6)
+  @IsNotEmpty({ message: '密码不能为空' })
   password: string; // 密码
 }
-
-
-
 
 export class UpdateUserDto {
   @ApiProperty({

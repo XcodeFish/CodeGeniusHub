@@ -1,0 +1,20 @@
+<svg width="520" height="600" viewBox="0 0 520 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景卡片 -->
+  <rect x="40" y="40" width="440" height="500" rx="28" fill="#fff" stroke="#e5e6eb" stroke-width="2"/>
+  <!-- Logo 圆形 -->
+  <circle cx="260" cy="110" r="34" fill="#1677ff"/>
+  <text x="260" y="122" text-anchor="middle" font-size="28" font-family="Inter,Arial" fill="#fff" font-weight="bold">L</text>
+  <!-- 标题 -->
+  <text x="260" y="190" text-anchor="middle" font-size="28" font-family="Inter,Arial" fill="#1d2129" font-weight="bold">登录到平台</text>
+  <!-- 用户名输入框 -->
+  <rect x="100" y="220" width="320" height="54" rx="12" fill="#f5f7fa" stroke="#e5e6eb" stroke-width="1.5"/>
+  <text x="120" y="254" font-size="18" font-family="Inter,Arial" fill="#bfbfbf">用户名</text>
+  <!-- 密码输入框 -->
+  <rect x="100" y="310" width="320" height="54" rx="12" fill="#f5f7fa" stroke="#e5e6eb" stroke-width="1.5"/>
+  <text x="120" y="344" font-size="18" font-family="Inter,Arial" fill="#bfbfbf">密码</text>
+  <!-- 登录按钮 -->
+  <rect x="100" y="390" width="320" height="56" rx="12" fill="#1677ff"/>
+  <text x="260" y="426" text-anchor="middle" font-size="22" font-family="Inter,Arial" fill="#fff" font-weight="bold">登录</text>
+  <!-- 忘记密码链接（右侧） -->
+  <text x="340" y="490" font-size="16" font-family="Inter,Arial" fill="#1677ff" style="text-decoration:underline;cursor:pointer;">忘记密码？</text>
+</svg>

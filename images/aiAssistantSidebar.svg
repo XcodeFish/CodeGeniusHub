@@ -1,0 +1,17 @@
+<svg width="350" height="260" viewBox="0 0 350 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 主卡片背景 -->
+  <rect x="10" y="10" width="330" height="240" rx="14" fill="#fff" stroke="#e5e6eb" stroke-width="1.5"/>
+  <!-- 输入需求/注释标题 -->
+  <text x="30" y="38" font-size="15" font-family="Inter,Arial" fill="#1d2129" font-weight="bold">输入需求/注释</text>
+  <!-- 输入框外框 -->
+  <rect x="30" y="50" width="290" height="48" rx="8" fill="#f5f7fa" stroke="#e5e6eb" stroke-width="1"/>
+  <!-- 输入框提示文字 -->
+  <text x="45" y="80" font-size="14" font-family="Inter,Arial" fill="#bfbfbf">请输入您的需求...</text>
+  <!-- 生成代码按钮 -->
+  <rect x="30" y="110" width="110" height="32" rx="7" fill="#1677ff"/>
+  <text x="85" y="132" text-anchor="middle" font-size="15" font-family="Inter,Arial" fill="#fff" font-weight="bold">生成代码</text>
+  <!-- 生成结果展示区标题 -->
+  <text x="30" y="170" font-size="15" font-family="Inter,Arial" fill="#1d2129" font-weight="bold">生成结果展示区</text>
+  <!-- 生成结果展示区外框 -->
+  <rect x="30" y="180" width="290" height="56" rx="8" fill="#f5f7fa" stroke="#e5e6eb" stroke-width="1"/>
+</svg>

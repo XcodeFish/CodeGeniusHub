@@ -8,6 +8,7 @@ import * as mongoose from 'mongoose';
 
 // =============业务模块=============
 import { AuthModule } from './modules/auth/auth.module';
+import { UserModule } from './modules/user/user.module';
 
 @Module({
   imports: [
@@ -66,6 +67,9 @@ import { AuthModule } from './modules/auth/auth.module';
 
     // 权限模块
     AuthModule,
+
+    // 用户模块
+    UserModule,
   ],
   controllers: [],
   providers: [],

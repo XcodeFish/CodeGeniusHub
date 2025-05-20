@@ -1,6 +1,6 @@
 // 用户信息相关的 DTO
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsEmail, MinLength } from 'class-validator';
 
 export class UserDto {
   @ApiProperty({ description: '用户唯一ID', example: 'uuid-xxx' })
@@ -40,9 +40,27 @@ export class UserDto {
   @IsOptional()
   @IsBoolean({ message: '是否首次登录必须是布尔值' })
   firstLogin?: boolean;
-
-  // 其他用户字段...
 }
+
+export class CreateUserDto {
+  @IsEmail()
+  email: string; // 邮箱，使用IsEmail进行格式校验
+
+  @IsOptional() // 用户名
+  @IsString()
+  username: string; // 用户名
+
+  @IsOptional() // 手机号可选
+  @IsString()
+  phone: string; // 手机号
+
+  @IsString()
+  @MinLength(6) // 密码最小长度为6
+  password: string; // 密码
+}
+
+
+
 
 export class UpdateUserDto {
   @ApiProperty({

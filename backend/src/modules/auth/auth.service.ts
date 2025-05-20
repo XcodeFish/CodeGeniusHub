@@ -256,7 +256,7 @@ export class AuthService {
       phone: userObject.phone,
       createdAt: userObject.createdAt, // 使用类型断言访问 createdAt
       updatedAt: userObject.updatedAt, // 使用类型断言访问 updatedAt
-      role: userObject.permission as any, // 将 permission 映射到 role 字段，需要根据实际类型转换
+      permission: userObject.permission,
       firstLogin: userObject.firstLogin,
       // 根据 UserDto 的定义添加其他字段
     };

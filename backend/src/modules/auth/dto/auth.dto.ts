@@ -47,8 +47,8 @@ export class RegisterDto {
 
   @ApiProperty({ description: '手机号', example: '13211223322' })
   @IsNotEmpty({ message: '手机号不能为空' })
-  @IsString()
   @IsPhoneNumber('CN')
+  @IsString()
   phone: string;
 }
 

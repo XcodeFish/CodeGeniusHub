@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import * as bcrypt from 'bcrypt'; // 静态导入 bcrypt
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -57,7 +58,6 @@ UserSchema.pre('save', async function (next) {
   const user = this as UserDocument;
   // 仅在密码被修改时重新哈希
   if (user.isModified('password')) {
-    const bcrypt = require('bcrypt'); // 延迟加载 bcrypt
     user.password = await bcrypt.hash(user.password, 10);
   }
   next();

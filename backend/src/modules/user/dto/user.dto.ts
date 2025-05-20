@@ -31,10 +31,10 @@ export class UserDto {
   @IsOptional()
   updatedAt?: Date;
 
-  @ApiProperty({ description: '用户角色', example: 'user' })
+  @ApiProperty({ description: '用户权限', example: 'viewer' })
   @IsString()
   @IsOptional()
-  role?: string;
+  permission?: string;
 
   @ApiProperty({ description: '是否首次登录', example: true })
   @IsOptional()

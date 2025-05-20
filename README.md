@@ -785,7 +785,8 @@ sequenceDiagram
     FE2->>BE: 发送编辑操作
     BE->>FE1: 广播编辑操作
     FE1->>U1: 实时同步内容
-    Note over BE,FE1,FE2: 光标、评论、成员状态同步同理
+    Note over BE,FE1: 光标、评论、成员状态同步同理
+    Note over FE1,FE2: 光标、评论、成员状态同步同理
 ```
 
 ### 3. 版本管理与diff超级详细流程

@@ -5,6 +5,10 @@ import databaseConfig from './config/database.config';
 import { MongooseModule } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 
+
+// =============业务模块=============
+import { AuthModule } from './modules/auth/auth.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -59,6 +63,9 @@ import * as mongoose from 'mongoose';
       },
       inject: [ConfigService],
     }),
+
+    // 权限模块
+    AuthModule,
   ],
   controllers: [],
   providers: [],

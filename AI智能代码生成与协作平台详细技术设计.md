@@ -89,12 +89,18 @@ export class AiService {
 
 ### 登录与认证设计
 
+- **多标识登录**：
+  - 支持用户通过**用户名、邮箱或手机号**配合密码进行登录。
+  - 后端根据输入的标识符自动判断类型并在相应字段中查询用户。
+- **验证码校验**：
+  - 登录时需要输入随机验证码进行二次校验，增强安全性。
+  - 后端接口获取验证码，并保存在数据库中， 前端展示验证码，登录输入账号、密码以及验证码进行登录。
 - **记住我/自动登录**：
   - 登录时如勾选"记住我"，后端在响应中设置`refresh token`到`httpOnly cookie`（不可被JS读取，防XSS）。
   - access token（短期有效）用于API请求，refresh token（长期有效）用于自动续签access token。
   - 前端每次启动检测cookie，若有refresh token则自动请求新access token，实现自动登录。
   - access token失效时，前端自动用refresh token换取新token，无感知续签。
-- **安全建议**：refresh token仅存httpOnly cookie，access token可存内存或短期localStorage。
+- **安全建议**：refresh token仅存httpOnly cookie，access token可存内存或短期localStorage。验证码应有时效性并一次性使用。
 
 ### 忘记密码功能设计（邮箱找回）
 
@@ -111,7 +117,9 @@ export class AiService {
 ### 注册参数设计
 
 - 注册时**邮箱为必填**，用于唯一性校验、找回密码、通知等。
-- 手机号可选，后续如需短信通知可扩展。
+- **用户名可选但建议填写**，需保证唯一性，方便用户登录和标识。
+- 手机号可选，后续如需短信通知或短信验证码登录可使用。
+- 所有作为登录标识的字段（邮箱、用户名、手机号）均需唯一性校验。
 
 ---
 
@@ -270,6 +278,8 @@ export default function App({ Component, pageProps }) {
 
 ### 登录与记住我/自动登录实现
 
+- 登录页支持用户名/邮箱/手机号多种方式登录，只需填写一种标识符。
+- 登录时需填写随机验证码，验证通过后才能提交登录表单。
 - 登录页提供"记住我"勾选项。
 - 登录成功后，access token存内存，refresh token由后端写入httpOnly cookie。
 - 前端每次启动时，自动请求`/api/auth/refresh`接口，用refresh token换取新access token，实现自动登录。
@@ -284,8 +294,9 @@ export default function App({ Component, pageProps }) {
 
 ### 注册参数说明
 
-- 注册表单**必须填写邮箱**，手机号可选。
-- 邮箱需唯一性校验。
+- 注册表单**必须填写邮箱**，用户名**建议填写**，手机号可选。
+- 邮箱、用户名和手机号均需进行唯一性校验。
+- 用户注册成功后，可使用邮箱、用户名或手机号配合密码登录。
 
 ### 样式方案
 

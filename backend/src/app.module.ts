@@ -16,6 +16,7 @@ import { ProjectModule } from './modules/project/project.module';
 import { CommonModule } from './common/common.module';
 import { FileModule } from './modules/file/file.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -52,6 +53,9 @@ import { CollaborationModule } from './modules/collaboration/collaboration.modul
 
     // 协作模块
     CollaborationModule,
+
+    // AI模块
+    AiModule,
 
     // 公共模块
     CommonModule,

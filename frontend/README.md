@@ -27,6 +27,7 @@ frontend/
 │   ├── stores/               # zustand状态管理
 │   ├── hooks/                # 通用hooks
 │   ├── utils/                # 工具函数
+│   ├── types/                # 类型定义
 │   ├── services/             # API请求封装
 │   ├── styles/               # 全局/模块样式
 │   └── config/               # 配置（如主题、常量）

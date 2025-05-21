@@ -2,13 +2,24 @@ import { useState, useCallback } from 'react';
 import { message } from 'antd';
 import { useUserStore } from '@/stores/userStore';
 import { LoginParams, RegisterParams } from '@/types/auth';
-import { UserProfile } from '@/types/user';
+import { UserProfile, User } from '@/types/user';
 import authService from '@/services/auth';
 // 类型转换工具函数
 const mapRoleToStoreRole = (role: string): 'admin' | 'editor' | 'viewer' => {
   if (role === 'admin') return 'admin';
   if (role === 'editor') return 'editor';
   return 'viewer';
+};
+
+// 将UserProfile映射为User的函数
+const mapUserProfileToUser = (profile: UserProfile): User => {
+  return {
+    id: profile.userId,
+    username: profile.username,
+    email: profile.email,
+    permission: profile.permission,
+    phone: profile.phone
+  };
 };
 
 /**
@@ -22,19 +33,26 @@ export function useAuth() {
 
   // 获取验证码
   const getCaptcha = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await authService.getCaptcha();
-      setCaptchaImg(res.captchaImg);
-      setCaptchaId(res.captchaId);
-      return res;
-    } catch (error) {
-      console.error('获取验证码失败:', error);
-      message.error('获取验证码失败，请重试');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  try {
+    setLoading(true);
+    const res = await authService.getCaptcha();
+    console.log("res",res);
+    
+    setCaptchaImg(res.captchaImg);
+    setCaptchaId(res.captchaId);
+    return res;
+  } catch (error) {
+    console.error('获取验证码失败:', error);
+    message.error('获取验证码失败，请稍后再试');
+    // 返回一个空对象，保证函数始终有返回值
+    return {
+      captchaImg: '',
+      captchaId: ''
+    };
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   // 登录
   const login = useCallback(async (params: Omit<LoginParams, 'captchaId'> & { captchaCode: string }) => {
@@ -52,13 +70,9 @@ export function useAuth() {
       // 获取用户详细信息
       const userInfo = await authService.getCurrentUser();
       
-      // 更新全局状态 - 转换角色类型
-      setUser({
-        id: userInfo.userId,
-        username: userInfo.username,
-        email: userInfo.email,
-        permission: userInfo.permission
-      }, res.token, mapRoleToStoreRole(userInfo.permission), false);
+      // 更新全局状态 - 使用映射函数处理属性差异
+      const mappedUser = mapUserProfileToUser(userInfo);
+      setUser(mappedUser, res.token, mapRoleToStoreRole(userInfo.permission), false);
       
       message.success('登录成功');
       return res;
@@ -119,13 +133,10 @@ export function useAuth() {
       // 获取用户信息
       const userInfo = await authService.getCurrentUser();
       
-      // 更新全局状态 - 转换角色类型
-      setUser({
-        id: userInfo.userId,
-        username: userInfo.username,
-        email: userInfo.email,
-        permission: userInfo.permission
-      }, res.token, mapRoleToStoreRole(userInfo.permission), false);
+      // 更新全局状态 - 使用映射函数处理属性差异
+      const mappedUser = mapUserProfileToUser(userInfo);
+      setUser(mappedUser, res.token, mapRoleToStoreRole(userInfo.permission), false);
+      
       return true;
     } catch (error) {
       console.error('自动登录失败:', error);

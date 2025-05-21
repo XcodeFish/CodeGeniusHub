@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { message } from 'antd';
+import apiConfig from '@/config/api.config';
 
 // 错误码映射
 const ERROR_CODE_MAP: Record<number, string> = {
@@ -14,8 +15,8 @@ const ERROR_CODE_MAP: Record<number, string> = {
 
 // 创建axios实例
 const request = axios.create({
-  baseURL: '/api',
-  timeout: 10000,
+  baseURL: apiConfig.baseUrl,
+  timeout: apiConfig.timeout,
 });
 
 // 请求拦截器

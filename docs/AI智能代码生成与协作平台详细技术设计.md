@@ -130,35 +130,39 @@ export class AiService {
 ```
 frontend/
 ├── src/
-│   ├── pages/                # Next.js页面
-│   ├── components/           # 通用组件
-│   ├── modules/              # 业务模块（Project、Editor、AI、Docs等）
+│   ├── pages/              // Next.js页面路由
+│   │   ├── _app.tsx        // 应用入口
+│   │   ├── _document.tsx   // 文档配置
+│   │   ├── index.tsx       // 首页
+│   │   ├── login.tsx       // 登录页
+│   │   ├── register.tsx    // 注册页
+│   │   ├── forgot-password.tsx // 忘记密码页
+│   │   └── dashboard/      // 嵌套路由
+│   │       └── index.tsx   // 仪表盘首页
+│   │
+│   ├── components/         // 全局共享组件
+│   │   ├── Layout/         // 布局组件
+│   │   ├── Navigation/     // 导航组件
+│   │   └── UI/             // UI通用组件
+│   │
+│   ├── modules/            // 业务模块
+│   │   ├── auth/           // 认证模块
+│   │   │   ├── components/ // 模块内组件
+│   │   │   │   ├── LoginForm.tsx
+│   │   │   │   ├── RegisterForm.tsx
+│   │   │   │   └── ForgotPasswordForm.tsx
+│   │   │   └── hooks/     // 模块内hooks
+│   │   │       └── useAuth.ts
 │   │   ├── Project/
-│   │   │   ├── ProjectList.tsx
-│   │   │   ├── useProject.ts      # 业务hooks（接口、业务逻辑、store交互）
 │   │   ├── Editor/
-│   │   │   ├── EditorPanel.tsx
-│   │   │   ├── useEditor.ts
-│   │   ├── AIHelper/
-│   │   │   ├── AIHelperPanel.tsx
-│   │   │   ├── useAIHelper.ts
-│   │   ├── Docs/
-│   │   │   ├── DocsGuide.tsx      # 首次登录引导/帮助
-│   │   │   ├── useDocs.ts
 │   │   └── ...
-│   ├── stores/               # zustand全局状态（仅存状态）
-│   │   ├── userStore.ts
-│   │   ├── projectStore.ts
-│   │   ├── editorStore.ts
-│   │   ├── aiStore.ts
-│   │   ├── uiStore.ts
-│   ├── hooks/                # 通用hooks（如useSocket）
-│   ├── utils/                # 工具函数
-│   ├── services/             # API请求封装
-│   ├── styles/               # 全局/模块样式
-│   └── config/               # 配置（如主题、常量）
-├── public/
-├── .env.local
+│   │
+│   ├── hooks/              // 全局共享hooks
+│   ├── stores/             // 状态管理
+│   ├── services/           // API服务
+│   ├── utils/              // 工具函数
+│   └── types/              // 类型定义
+│
 └── ...
 ```
 

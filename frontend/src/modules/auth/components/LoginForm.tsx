@@ -1,0 +1,186 @@
+import React, { useEffect, useState } from 'react';
+import { Form, Input, Button, Checkbox, message, Card, Space } from 'antd';
+import { UserOutlined, LockOutlined, SafetyCertificateOutlined, EyeOutlined, EyeInvisibleOutlined, RobotOutlined, CustomerServiceOutlined } from '@ant-design/icons';
+import { useRouter } from 'next/router';
+import Link from 'next/link';
+import { useAuth } from '@/modules/auth/useAuth';
+import styles from '@/styles/Login.module.scss';
+
+/**
+ * 登录表单组件
+ */
+const LoginForm: React.FC = () => {
+  const [form] = Form.useForm();
+  const router = useRouter();
+  const { loading, captchaImg, getCaptcha, login } = useAuth();
+  const [remember, setRemember] = useState(false);
+
+  // 组件挂载时获取验证码
+  useEffect(() => {
+    getCaptcha();
+  }, [getCaptcha]);
+
+  // 刷新验证码
+  const refreshCaptcha = () => {
+    getCaptcha();
+  };
+
+  // 提交表单
+  const handleSubmit = async (values: any) => {
+    try {
+      await login({
+        email: values.username,
+        password: values.password,
+        captchaCode: values.captcha,
+        remember
+      });
+
+      message.success('登录成功');
+      router.push('/');
+    } catch (error: any) {
+      console.error('登录失败:', error);
+    }
+  };
+
+  return (
+    <>
+      <Card className={styles.loginBox}>
+        <div className={styles.loginHeader}>
+          <h1>AI 智能代码生成与协作平台</h1>
+        </div>
+        <Form
+          form={form}
+          name="login"
+          onFinish={handleSubmit}
+          autoComplete="off"
+          layout="vertical"
+          requiredMark={false}
+          validateTrigger={['onChange', 'onBlur']}
+        >
+          <Form.Item
+            name="username"
+            validateFirst={true}
+            className={styles.formItem}
+            rules={[
+              { required: true, message: '请输入账号/手机号/邮箱' },
+              { min: 4, message: '账号长度至少为 4 位' },
+              { max: 50, message: '账号长度不能超过 50 位' },
+              {
+                pattern: /^(?:[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)+|1[3-9]\d{9}|[a-zA-Z][a-zA-Z0-9_-]{3,15})$/,
+                message: '请输入正确的账号/手机号/邮箱'
+              }
+            ]}
+          >
+            <Input
+              size="large"
+              placeholder="请输入账号/手机号/邮箱"
+              prefix={<UserOutlined />}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="password"
+            validateFirst={true}
+            className={styles.formItem}
+            rules={[
+              { required: true, message: '请输入密码' },
+              { min: 6, message: '密码长度至少为 6 位' },
+              { max: 20, message: '密码长度不能超过 20 位' },
+              {
+                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^]{6,20}$/,
+                message: '密码必须包含大小写字母和数字'
+              }
+            ]}
+          >
+            <Input.Password
+              size="large"
+              placeholder="请输入密码"
+              prefix={<LockOutlined />}
+              iconRender={visible => (visible ? <EyeOutlined /> : <EyeInvisibleOutlined />)}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="captcha"
+            validateFirst={true}
+            className={styles.formItem}
+            rules={[
+              { required: true, message: '请输入验证码' },
+              { len: 6, message: '验证码长度必须为 6 位' },
+              {
+                pattern: /^[a-zA-Z0-9]{6}$/,
+                message: '验证码只能包含字母和数字'
+              }
+            ]}
+          >
+            <Space.Compact className={styles.captchaRow}>
+              <Input
+                size="large"
+                placeholder="请输入验证码"
+                prefix={<SafetyCertificateOutlined />}
+                className={styles.captchaInput}
+                maxLength={6}
+              />
+              <div
+                className={styles.captchaImg}
+                onClick={refreshCaptcha}
+              >
+                {captchaImg ? (
+                  <img 
+                    src={`data:image/svg+xml;base64,${btoa(captchaImg)}`} 
+                    alt="验证码" 
+                    className={styles.captchaImg}
+                  />
+                ) : (
+                  <div>
+                    点击获取验证码
+                  </div>
+                )}
+              </div>
+            </Space.Compact>
+          </Form.Item>
+
+          <Form.Item>
+            <div className={styles.rememberRow}>
+              <Checkbox 
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+              >
+                记住我
+              </Checkbox>
+              <div>
+                <Link href="/forgot-password" className={styles.forgotLink}>
+                  忘记密码？
+                </Link>
+                <Link href="/register" className={styles.registerLink}>
+                  注册用户
+                </Link>
+              </div>
+            </div>
+            <Button 
+              type="primary" 
+              htmlType="submit" 
+              loading={loading}
+              className={styles.submitButton}
+              size="large"
+            >
+              登 录
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+      
+      {/* 右下角客服入口 */}
+      <div className={styles.helpButtons}>
+        <div className={`${styles.helpButton} ${styles.dark}`}>
+          <RobotOutlined />
+        </div>
+        <div className={`${styles.helpButton} ${styles.primary}`}>
+          <CustomerServiceOutlined />
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default LoginForm; 

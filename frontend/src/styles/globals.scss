@@ -11,11 +11,59 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
     'Noto Color Emoji';
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.85);
+  background-color: #f0f2f5;
+  min-height: 100vh;
 }
 
 a {
-  color: inherit;
+  color: #1890ff;
   text-decoration: none;
+  transition: color 0.3s;
+
+  &:hover {
+    color: #40a9ff;
+  }
+}
+
+.page-container {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 覆盖antd默认样式 */
+.ant-form-item-with-help .ant-form-item-explain {
+  min-height: auto;
+}
+
+/* 响应式样式 */
+@media (max-width: 768px) {
+  .login-container {
+    padding: 16px;
+  }
+  
+  .login-box {
+    width: 100% !important;
+    padding: 24px !important;
+  }
 }
 
 @media (prefers-color-scheme: dark) {

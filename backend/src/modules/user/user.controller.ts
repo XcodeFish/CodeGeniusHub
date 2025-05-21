@@ -15,6 +15,7 @@ import {
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard'; // 假设存在用于HTTP的JwtAuthGuard
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { Public } from '@/common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator'; // 引入Roles装饰器
 import { UpdateUserDto, CreateUserDto } from './dto/user.dto'; // 引入UpdateUserDto和CreateUserDto
 import { User, UserDocument } from './schemas/user.schema'; // 引入User Schema
@@ -169,6 +170,7 @@ export class UserController {
    * @returns Promise<User> - 创建成功的用户信息（去除密码）
    */
   @Post('register')
+  @Public()
   @ApiOperation({ summary: '用户注册' })
   @ApiBody({ type: CreateUserDto })
   @ApiResponse({ status: 201, description: '注册成功，返回用户信息' })

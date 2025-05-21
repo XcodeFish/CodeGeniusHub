@@ -64,7 +64,7 @@ export class AuthService {
     const { text, data } = svgCaptcha.create({ size: 4, noise: 2 });
     const captchaId = uuid.v4();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5分钟有效期
-
+    console.log('text', text);
     const newCaptcha = new this.captchaModel({
       captchaId,
       text: text,

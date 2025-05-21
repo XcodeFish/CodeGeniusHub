@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Observable } from 'rxjs';
+import { Reflector } from '@nestjs/core';
 
 /**
  * JWT认证守卫 (用于HTTP请求)
@@ -14,6 +15,9 @@ import { Observable } from 'rxjs';
  */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private reflector: Reflector) {
+    super();
+  }
   /**
    * 覆盖 getRequest 方法，以便从 HTTP 请求上下文中获取请求对象。
    * Passport AuthGuard 默认期望的是 Express/Fastify 的 Request 对象，
@@ -56,6 +60,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   canActivate(
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(
+      'isPublic',
+      [context.getHandler(), context.getClass()],
+    );
+    if (isPublic) {
+      return true;
+    }
     // 调用父类的 canActivate 方法，它会触发 Passport Strategy
     return super.canActivate(context);
   }

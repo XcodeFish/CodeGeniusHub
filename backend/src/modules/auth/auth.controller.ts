@@ -25,6 +25,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
+import { Public } from '@/common/decorators/public.decorator';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AUTH_ERROR } from '../../common/constants/auth-error-codes';
 
@@ -40,6 +41,7 @@ export class AuthController {
    * 获取图形验证码
    */
   @Get('captcha')
+ @Public()
   @ApiOperation({ summary: '获取图形验证码' })
   @ApiResponse({ status: 200, description: '获取成功，返回验证码信息' })
   async getCaptcha(): Promise<CaptchaResponseDto> {
@@ -52,6 +54,7 @@ export class AuthController {
    * @returns RegisterResponseDto
    */
   @Post('register')
+ @Public()
   @ApiOperation({ summary: '用户注册（带验证码）' })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({
@@ -72,6 +75,7 @@ export class AuthController {
    * 用户登录
    */
   @Post('login')
+ @Public()
   @ApiOperation({ summary: '用户登录' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
@@ -125,6 +129,7 @@ export class AuthController {
    * 忘记密码-发送验证码
    */
   @Post('forgot-password')
+ @Public()
   @ApiOperation({ summary: '忘记密码-发送验证码' })
   @ApiBody({ type: ForgotPasswordDto })
   @ApiResponse({
@@ -145,6 +150,7 @@ export class AuthController {
    * 重置密码
    */
   @Post('rest-password')
+ @Public()
   @ApiOperation({ summary: '重置密码' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({

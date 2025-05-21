@@ -11,6 +11,7 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
 // =============业务模块=============
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
+import { ProjectModule } from './modules/project/project.module';
 
 @Module({
   imports: [
@@ -72,6 +73,9 @@ import { UserModule } from './modules/user/user.module';
 
     // 用户模块
     UserModule,
+
+    // 项目模块
+    ProjectModule,
   ],
   controllers: [],
   providers: [],

@@ -23,4 +23,40 @@ export default registerAs('mail', () => ({
       strict: true,
     },
   },
+  // 国际化配置
+  i18n: {
+    defaultLocale: process.env.DEFAULT_LOCALE || 'zh-CN',
+    fallbackLocale: 'en-US',
+    supportedLocales: ['zh-CN', 'en-US'],
+  },
+  // 队列和限流配置
+  queue: {
+    enabled: process.env.MAIL_QUEUE_ENABLED === 'true',
+    checkInterval: parseInt(
+      process.env.MAIL_QUEUE_CHECK_INTERVAL || '60000',
+      10,
+    ), // 60秒
+  },
+  // 重试配置
+  maxRetries: parseInt(process.env.MAIL_MAX_RETRIES || '3', 10),
+  retryDelays: [60000, 300000, 1800000], // 默认重试间隔：1分钟, 5分钟, 30分钟
+
+  // 限流配置
+  rateLimit: {
+    maxEmailsPerHour: parseInt(
+      process.env.MAIL_RATE_LIMIT_PER_HOUR || '10',
+      10,
+    ),
+    windowMs: parseInt(process.env.MAIL_RATE_WINDOW_MS || '3600000', 10), // 默认1小时窗口
+  },
+
+  // 安全配置
+  security: {
+    tokenExpiryMinutes: parseInt(
+      process.env.MAIL_TOKEN_EXPIRY_MINUTES || '30',
+      10,
+    ),
+    passwordResetSignSecret:
+      process.env.PASSWORD_RESET_SECRET || 'your-secret-key',
+  },
 }));

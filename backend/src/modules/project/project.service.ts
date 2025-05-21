@@ -16,8 +16,8 @@ import {
   BulkAddMembersDto,
   ProjectFilterDto,
 } from './dto/project.dto';
-import { Permission } from '@/modules/user/schemas/user.schema';
-import { User, UserDocument } from '@/modules/user/schemas/user.schema';
+import { Permission } from '../../modules/user/schemas/user.schema';
+import { User } from '../../modules/user/schemas/user.schema';
 import { PROJECT_ERROR } from './dto/project.dto';
 import { PermissionService } from '../../common/services/permission.service';
 
@@ -25,7 +25,7 @@ import { PermissionService } from '../../common/services/permission.service';
 export class ProjectService {
   constructor(
     @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(User.name) private userModel: Model<User>,
     private readonly permissionService: PermissionService,
   ) {}
 
@@ -653,5 +653,209 @@ export class ProjectService {
       console.error('移除用户项目权限失败:', error);
       return false;
     }
+  }
+
+  /**
+   * 获取项目成员列表
+   * @param projectId 项目ID
+   * @returns 成员列表
+   */
+  async getProjectMembers(projectId: string): Promise<any[]> {
+    const project = await this.projectModel
+      .findById(projectId)
+      .populate('members.userId', 'username email avatar')
+      .lean();
+
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+
+    return project.members;
+  }
+
+  /**
+   * 添加成员到项目
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @param permission 权限级别
+   * @returns 更新后的项目
+   */
+  async addMemberToProject(
+    projectId: string,
+    userId: string,
+    permission: Permission,
+  ): Promise<Project> {
+    // 验证项目存在
+    const project = await this.projectModel.findById(projectId);
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+
+    // 验证用户存在
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    // 检查用户是否已经是项目成员
+    const isMember = project.members.some(
+      (member) => member.userId.toString() === userId,
+    );
+
+    if (isMember) {
+      throw new BadRequestException('用户已经是项目成员');
+    }
+
+    // 添加成员
+    project.members.push({
+      userId,
+      permission,
+      joinedAt: new Date(),
+    });
+
+    // 更新项目协作者数量
+    project.collaboratorsCount = project.members.length;
+
+    // 保存更新
+    await project.save();
+
+    return project;
+  }
+
+  /**
+   * 更新项目成员权限
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @param permission 权限级别
+   * @returns 更新后的项目
+   */
+  async updateMemberPermission(
+    projectId: string,
+    userId: string,
+    permission: Permission,
+  ): Promise<Project> {
+    // 验证项目存在
+    const project = await this.projectModel.findById(projectId);
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+
+    // 验证用户是项目成员
+    const memberIndex = project.members.findIndex(
+      (member) => member.userId.toString() === userId,
+    );
+
+    if (memberIndex === -1) {
+      throw new NotFoundException('用户不是项目成员');
+    }
+
+    // 不能修改项目创建者的权限
+    if (project.createdBy.toString() === userId) {
+      throw new BadRequestException('不能修改项目创建者的权限');
+    }
+
+    // 更新权限
+    project.members[memberIndex].permission = permission;
+
+    // 保存更新
+    await project.save();
+
+    return project;
+  }
+
+  /**
+   * 从项目中移除成员
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @returns 更新后的项目
+   */
+  async removeMemberFromProject(
+    projectId: string,
+    userId: string,
+  ): Promise<Project> {
+    // 验证项目存在
+    const project = await this.projectModel.findById(projectId);
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+
+    // 不能移除项目创建者
+    if (project.createdBy.toString() === userId) {
+      throw new BadRequestException('不能移除项目创建者');
+    }
+
+    // 验证用户是项目成员
+    const memberIndex = project.members.findIndex(
+      (member) => member.userId.toString() === userId,
+    );
+
+    if (memberIndex === -1) {
+      throw new NotFoundException('用户不是项目成员');
+    }
+
+    // 移除成员
+    project.members.splice(memberIndex, 1);
+
+    // 更新项目协作者数量
+    project.collaboratorsCount = project.members.length;
+
+    // 保存更新
+    await project.save();
+
+    return project;
+  }
+
+  /**
+   * 批量更新项目成员
+   * @param projectId 项目ID
+   * @param members 成员列表及权限
+   * @returns 更新后的项目
+   */
+  async batchUpdateMembers(
+    projectId: string,
+    members: { userId: string; permission: Permission }[],
+  ): Promise<Project> {
+    // 验证项目存在
+    const project = await this.projectModel.findById(projectId);
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+
+    // 获取项目创建者ID
+    const creatorId = project.createdBy.toString();
+
+    for (const member of members) {
+      // 跳过项目创建者的权限更新
+      if (member.userId === creatorId) {
+        continue;
+      }
+
+      const memberIndex = project.members.findIndex(
+        (m) => m.userId.toString() === member.userId,
+      );
+
+      if (memberIndex === -1) {
+        // 如果用户不在项目中，添加为新成员
+        const user = await this.userModel.findById(member.userId);
+        if (user) {
+          project.members.push({
+            userId: member.userId,
+            permission: member.permission,
+            joinedAt: new Date(),
+          });
+        }
+      } else {
+        // 更新现有成员权限
+        project.members[memberIndex].permission = member.permission;
+      }
+    }
+
+    // 更新项目协作者数量
+    project.collaboratorsCount = project.members.length;
+
+    // 保存更新
+    await project.save();
+
+    return project;
   }
 }

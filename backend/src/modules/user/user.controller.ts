@@ -29,9 +29,15 @@ import {
   UserResponseDto,
 } from './dto/user.dto'; // 引入UserResponseDto
 import { User, UserDocument, Module } from './schemas/user.schema'; // 引入User Schema
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger'; // 引入swagger装饰器
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiParam,
+} from '@nestjs/swagger'; // 引入swagger装饰器
 import { USER_ERROR } from '../../common/constants/error-codes';
-import { Permission } from '../user/schemas/user.schema'; // 修正导入路径
+import { Permission } from './schemas/user.schema'; // 修正导入路径
 import { PermissionService } from '../../common/services/permission.service';
 
 // 批量更新项目权限DTO
@@ -348,48 +354,150 @@ export class UserController {
   }
 
   /**
+   * 获取用户系统权限
+   * @param id 用户ID
+   * @returns 用户系统权限
+   */
+  @Get(':id/system-permission')
+  @ApiOperation({ summary: '获取用户系统权限' })
+  @ApiParam({ name: 'id', description: '用户ID' })
+  @ApiResponse({ status: 200, description: '成功获取权限' })
+  @Roles(Permission.VIEWER)
+  async getUserSystemPermission(@Param('id') id: string) {
+    const permission = await this.permissionService.getUserSystemPermission(id);
+    return {
+      code: 0,
+      message: '获取成功',
+      data: { permission },
+    };
+  }
+
+  /**
    * 更新用户系统权限
-   * @param req 请求对象
-   * @param userId 目标用户ID
+   * @param id 用户ID
    * @param permission 权限级别
+   * @param req 请求对象
    * @returns 更新结果
    */
-  @Put(':userId/system-permission')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Permission.ADMIN) // 只有系统管理员可以修改系统权限
+  @Put(':id/system-permission')
   @ApiOperation({ summary: '更新用户系统权限' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '更新成功',
+  @ApiParam({ name: 'id', description: '用户ID' })
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        code: { type: 'number', example: 0 },
-        message: { type: 'string', example: '权限更新成功' },
-        success: { type: 'boolean', example: true },
+        permission: {
+          type: 'string',
+          enum: Object.values(Permission),
+          description: '权限级别',
+        },
       },
     },
   })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '权限不足' })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: '用户不存在' })
-  @HttpCode(HttpStatus.OK)
-  async updateSystemPermission(
-    @Request() req,
-    @Param('userId') userId: string,
+  @ApiResponse({ status: 200, description: '权限更新成功' })
+  @Roles(Permission.ADMIN)
+  async updateUserSystemPermission(
+    @Param('id') id: string,
     @Body('permission') permission: Permission,
+    @Request() req,
   ) {
-    const currentUserId = req.user.userId;
-
-    await this.permissionService.updateSystemPermission(
-      userId,
+    const user = await this.permissionService.updateSystemPermission(
+      id,
       permission,
-      currentUserId,
+      req.user.id,
     );
 
     return {
       code: 0,
-      message: '系统权限更新成功',
-      success: true,
+      message: '权限更新成功',
+      data: { user },
+    };
+  }
+
+  /**
+   * 获取用户项目权限
+   * @param id 用户ID
+   * @returns 用户所有项目权限
+   */
+  @Get(':id/project-permissions')
+  @ApiOperation({ summary: '获取用户所有项目权限' })
+  @ApiParam({ name: 'id', description: '用户ID' })
+  @ApiResponse({ status: 200, description: '成功获取权限' })
+  @Roles(Permission.VIEWER)
+  async getUserProjectPermissions(@Param('id') id: string) {
+    const user = await this.userService.findById(id);
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    return {
+      code: 0,
+      message: '获取成功',
+      data: { projectPermissions: user.projectPermissions || [] },
+    };
+  }
+
+  /**
+   * 批量更新用户权限
+   * @param updates 权限更新列表
+   * @param req 请求对象
+   * @returns 批量更新结果
+   */
+  @Post('/batch-update-permissions')
+  @ApiOperation({ summary: '批量更新用户系统权限' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        updates: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              userId: { type: 'string' },
+              permission: {
+                type: 'string',
+                enum: Object.values(Permission),
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: '批量更新成功' })
+  @Roles(Permission.ADMIN)
+  async batchUpdateUserPermissions(
+    @Body('updates') updates: { userId: string; permission: Permission }[],
+    @Request() req,
+  ) {
+    const results: { userId: string; success: boolean; message: string }[] = [];
+
+    for (const update of updates) {
+      try {
+        await this.permissionService.updateSystemPermission(
+          update.userId,
+          update.permission,
+          req.user.id,
+        );
+        results.push({
+          userId: update.userId,
+          success: true,
+          message: '更新成功',
+        });
+      } catch (error) {
+        results.push({
+          userId: update.userId,
+          success: false,
+          message: error.message || '更新失败',
+        });
+      }
+    }
+
+    return {
+      code: 0,
+      message: '批量更新完成',
+      data: { results },
     };
   }
 

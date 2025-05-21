@@ -41,12 +41,21 @@ import {
   PROJECT_ERROR,
 } from './dto/project.dto';
 import { Permission } from '@/modules/user/schemas/user.schema';
+import { PermissionService } from '../../common/services/permission.service';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User, UserDocument } from '../../modules/user/schemas/user.schema';
 
 @Controller('projects')
 @ApiTags('项目管理')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProjectController {
-  constructor(private readonly projectService: ProjectService) {}
+  constructor(
+    private readonly projectService: ProjectService,
+    private readonly permissionService: PermissionService,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+  ) {}
 
   /**
    * 创建新项目
@@ -253,8 +262,6 @@ export class ProjectController {
     }
   }
 
-  // src/modules/project/project.controller.ts (继续)
-
   /**
    * 删除项目
    * @param req 请求对象
@@ -386,274 +393,231 @@ export class ProjectController {
   }
 
   /**
-   * 添加项目成员
+   * 获取项目成员及其权限
    * @param req 请求对象
    * @param projectId 项目ID
-   * @param memberDto 成员信息
+   * @returns 项目成员及其权限
+   */
+  @Get(':projectId/members')
+  @ApiOperation({ summary: '获取项目成员及其权限' })
+  @ApiParam({ name: 'projectId', description: '项目ID' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @Roles(Permission.VIEWER)
+  async getProjectMembers(
+    @Param('projectId') projectId: string,
+    @Request() req,
+  ): Promise<any[]> {
+    await this.permissionService.validateProjectAccess(req.user.id, projectId);
+    return this.projectService.getProjectMembers(projectId);
+  }
+
+  /**
+   * 添加成员到项目
+   * @param req 请求对象
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @param permission 权限级别
    * @returns 更新后的项目
    */
   @Post(':projectId/members')
-  @ApiOperation({ summary: '添加项目成员' })
+  @ApiOperation({ summary: '添加成员到项目' })
   @ApiParam({ name: 'projectId', description: '项目ID' })
-  @ApiBody({ type: AddMemberDto })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '添加成功',
-    type: ProjectDetailResponseDto,
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: '用户ID' },
+        permission: {
+          type: 'string',
+          enum: Object.values(Permission),
+          description: '权限级别',
+        },
+      },
+    },
   })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: '项目不存在或用户不存在',
-  })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '无权操作此项目' })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: '成员已存在' })
-  @ApiResponse({
-    status: HttpStatus.INTERNAL_SERVER_ERROR,
-    description: '服务器内部错误',
-  })
+  @ApiResponse({ status: 201, description: '添加成功' })
+  @Roles(Permission.ADMIN)
   async addProjectMember(
-    @Request() req,
     @Param('projectId') projectId: string,
-    @Body() memberDto: AddMemberDto,
+    @Body('userId') userId: string,
+    @Body('permission') permission: Permission,
+    @Request() req,
   ): Promise<ProjectDetailResponseDto> {
-    try {
-      const userId = req.user.userId;
-      const project = await this.projectService.addProjectMember(
-        projectId,
-        userId,
-        memberDto,
-      );
+    await this.permissionService.validateProjectManageAccess(
+      req.user.id,
+      projectId,
+    );
 
-      return this.transformProjectDetailResponse(project);
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
+    // 更新用户项目权限
+    await this.permissionService.updateProjectPermission(
+      userId,
+      projectId,
+      permission,
+      req.user.id,
+    );
 
-      console.error('添加项目成员失败:', error);
-      throw new InternalServerErrorException(PROJECT_ERROR.INTERNAL_ERROR);
-    }
+    // 更新项目成员列表
+    const project = await this.projectService.addMemberToProject(
+      projectId,
+      userId,
+      permission,
+    );
+
+    return this.transformProjectDetailResponse(project);
   }
 
   /**
-   * 批量添加项目成员
+   * 更新项目成员权限
    * @param req 请求对象
    * @param projectId 项目ID
-   * @param membersDto 成员列表
+   * @param userId 用户ID
+   * @param permission 权限级别
+   * @returns 更新后的项目
+   */
+  @Put(':projectId/members/:userId')
+  @ApiOperation({ summary: '更新项目成员权限' })
+  @ApiParam({ name: 'projectId', description: '项目ID' })
+  @ApiParam({ name: 'userId', description: '用户ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        permission: {
+          type: 'string',
+          enum: Object.values(Permission),
+          description: '权限级别',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: '更新成功' })
+  @Roles(Permission.ADMIN)
+  async updateProjectMember(
+    @Param('projectId') projectId: string,
+    @Param('userId') userId: string,
+    @Body('permission') permission: Permission,
+    @Request() req,
+  ): Promise<ProjectDetailResponseDto> {
+    await this.permissionService.validateProjectManageAccess(
+      req.user.id,
+      projectId,
+    );
+
+    // 更新用户项目权限
+    await this.permissionService.updateProjectPermission(
+      userId,
+      projectId,
+      permission,
+      req.user.id,
+    );
+
+    // 更新项目成员列表
+    const project = await this.projectService.updateMemberPermission(
+      projectId,
+      userId,
+      permission,
+    );
+
+    return this.transformProjectDetailResponse(project);
+  }
+
+  /**
+   * 从项目中移除成员
+   * @param req 请求对象
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @returns 更新后的项目
+   */
+  @Delete(':projectId/members/:userId')
+  @ApiOperation({ summary: '从项目中移除成员' })
+  @ApiParam({ name: 'projectId', description: '项目ID' })
+  @ApiParam({ name: 'userId', description: '用户ID' })
+  @ApiResponse({ status: 200, description: '移除成功' })
+  @Roles(Permission.ADMIN)
+  async removeProjectMember(
+    @Param('projectId') projectId: string,
+    @Param('userId') userId: string,
+    @Request() req,
+  ): Promise<ProjectDetailResponseDto> {
+    await this.permissionService.validateProjectManageAccess(
+      req.user.id,
+      projectId,
+    );
+
+    // 移除用户项目权限
+    const user = await this.userModel.findById(userId);
+    if (user) {
+      user.projectPermissions = user.projectPermissions.filter(
+        (p) => p.projectId !== projectId,
+      );
+      await user.save();
+    }
+
+    // 从项目成员列表中移除
+    const project = await this.projectService.removeMemberFromProject(
+      projectId,
+      userId,
+    );
+
+    return this.transformProjectDetailResponse(project);
+  }
+
+  /**
+   * 批量更新项目成员权限
+   * @param req 请求对象
+   * @param projectId 项目ID
+   * @param members 成员列表
    * @returns 更新后的项目
    */
   @Post(':projectId/members/batch')
-  @ApiOperation({ summary: '批量添加项目成员' })
+  @ApiOperation({ summary: '批量更新项目成员权限' })
   @ApiParam({ name: 'projectId', description: '项目ID' })
-  @ApiBody({ type: BulkAddMembersDto })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '添加成功',
-    type: ProjectDetailResponseDto,
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        members: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              userId: { type: 'string' },
+              permission: {
+                type: 'string',
+                enum: Object.values(Permission),
+              },
+            },
+          },
+        },
+      },
+    },
   })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: '项目不存在或用户不存在',
-  })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '无权操作此项目' })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: '参数校验失败' })
-  @ApiResponse({
-    status: HttpStatus.INTERNAL_SERVER_ERROR,
-    description: '服务器内部错误',
-  })
-  async addProjectMembers(
-    @Request() req,
+  @ApiResponse({ status: 200, description: '批量更新成功' })
+  @Roles(Permission.ADMIN)
+  async batchUpdateProjectMembers(
     @Param('projectId') projectId: string,
-    @Body() membersDto: BulkAddMembersDto,
+    @Body('members') members: { userId: string; permission: Permission }[],
+    @Request() req,
   ): Promise<ProjectDetailResponseDto> {
-    try {
-      const userId = req.user.userId;
-      const project = await this.projectService.addProjectMembers(
-        projectId,
-        userId,
-        membersDto,
-      );
+    await this.permissionService.validateProjectManageAccess(
+      req.user.id,
+      projectId,
+    );
 
-      return this.transformProjectDetailResponse(project);
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
+    // 批量更新用户项目权限
+    await this.permissionService.batchUpdateProjectPermissions(
+      projectId,
+      members,
+      req.user.id,
+    );
 
-      console.error('批量添加项目成员失败:', error);
-      throw new InternalServerErrorException(PROJECT_ERROR.INTERNAL_ERROR);
-    }
-  }
+    // 更新项目成员列表
+    const project = await this.projectService.batchUpdateMembers(
+      projectId,
+      members,
+    );
 
-  /**
-   * 更新项目成员角色
-   * @param req 请求对象
-   * @param projectId 项目ID
-   * @param memberId 成员ID
-   * @param updateDto 角色更新信息
-   * @returns 更新后的项目
-   */
-  @Put(':projectId/members/:memberId')
-  @ApiOperation({ summary: '更新项目成员角色' })
-  @ApiParam({ name: 'projectId', description: '项目ID' })
-  @ApiParam({ name: 'memberId', description: '成员用户ID' })
-  @ApiBody({ type: UpdateProjectMemberDto })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '更新成功',
-    type: ProjectDetailResponseDto,
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: '项目不存在或成员不存在',
-  })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '无权操作此项目' })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: '不能修改创建者角色',
-  })
-  @ApiResponse({
-    status: HttpStatus.INTERNAL_SERVER_ERROR,
-    description: '服务器内部错误',
-  })
-  async updateProjectMember(
-    @Request() req,
-    @Param('projectId') projectId: string,
-    @Param('memberId') memberId: string,
-    @Body() updateDto: UpdateProjectMemberDto,
-  ): Promise<ProjectDetailResponseDto> {
-    try {
-      const userId = req.user.userId;
-      const project = await this.projectService.updateProjectMember(
-        projectId,
-        userId,
-        memberId,
-        updateDto,
-      );
-
-      return this.transformProjectDetailResponse(project);
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-
-      console.error('更新项目成员角色失败:', error);
-      throw new InternalServerErrorException(PROJECT_ERROR.INTERNAL_ERROR);
-    }
-  }
-
-  /**
-   * 移除项目成员
-   * @param req 请求对象
-   * @param projectId 项目ID
-   * @param memberId 成员ID
-   * @returns 更新后的项目
-   */
-  @Delete(':projectId/members/:memberId')
-  @ApiOperation({ summary: '移除项目成员' })
-  @ApiParam({ name: 'projectId', description: '项目ID' })
-  @ApiParam({ name: 'memberId', description: '成员用户ID' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '移除成功',
-    type: ProjectDetailResponseDto,
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: '项目不存在或成员不存在',
-  })
-  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '无权操作此项目' })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: '不能移除项目创建者',
-  })
-  @ApiResponse({
-    status: HttpStatus.INTERNAL_SERVER_ERROR,
-    description: '服务器内部错误',
-  })
-  async removeProjectMember(
-    @Request() req,
-    @Param('projectId') projectId: string,
-    @Param('memberId') memberId: string,
-  ): Promise<ProjectDetailResponseDto> {
-    try {
-      const userId = req.user.userId;
-      const project = await this.projectService.removeProjectMember(
-        projectId,
-        userId,
-        memberId,
-      );
-
-      return this.transformProjectDetailResponse(project);
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-
-      console.error('移除项目成员失败:', error);
-      throw new InternalServerErrorException(PROJECT_ERROR.INTERNAL_ERROR);
-    }
-  }
-
-  /**
-   * 用户离开项目
-   * @param req 请求对象
-   * @param projectId 项目ID
-   * @returns 成功消息
-   */
-  @Delete(':projectId/leave')
-  @ApiOperation({ summary: '当前用户离开项目' })
-  @ApiParam({ name: 'projectId', description: '项目ID' })
-  @ApiResponse({ status: HttpStatus.OK, description: '离开成功' })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: '项目不存在或用户不是项目成员',
-  })
-  @ApiResponse({
-    status: HttpStatus.BAD_REQUEST,
-    description: '项目创建者不能离开项目',
-  })
-  @ApiResponse({
-    status: HttpStatus.INTERNAL_SERVER_ERROR,
-    description: '服务器内部错误',
-  })
-  async leaveProject(
-    @Request() req,
-    @Param('projectId') projectId: string,
-  ): Promise<{ code: number; message: string; success: boolean }> {
-    try {
-      const userId = req.user.userId;
-      await this.projectService.removeProjectMember(projectId, userId, userId);
-
-      return { code: 0, message: '已成功离开项目', success: true };
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ForbiddenException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-
-      console.error('离开项目失败:', error);
-      throw new InternalServerErrorException(PROJECT_ERROR.INTERNAL_ERROR);
-    }
+    return this.transformProjectDetailResponse(project);
   }
 
   /**

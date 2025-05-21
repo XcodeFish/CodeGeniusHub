@@ -11,6 +11,7 @@ export interface GenerateCodeOptions {
   model?: string;
   apiKey?: string;
   baseUrl?: string;
+  customPrompt?: string;
 }
 
 export interface AnalyzeCodeOptions {
@@ -19,6 +20,7 @@ export interface AnalyzeCodeOptions {
   model?: string;
   apiKey?: string;
   baseUrl?: string;
+  customPrompt?: string;
 }
 
 export interface OptimizeCodeOptions {
@@ -28,6 +30,7 @@ export interface OptimizeCodeOptions {
   model?: string;
   apiKey?: string;
   baseUrl?: string;
+  customPrompt?: string;
 }
 
 export interface ChatOptions {
@@ -37,6 +40,7 @@ export interface ChatOptions {
   model?: string;
   apiKey?: string;
   baseUrl?: string;
+  customPrompt?: string;
 }
 
 export interface TestConnectionOptions {
@@ -102,13 +106,11 @@ export interface LlmProvider {
 
   /**
    * 聊天对话
-   * @param message 用户消息
-   * @param history 历史对话记录
+   * @param messages 聊天消息数组或单个用户消息
    * @param options 额外选项
    */
   chat(
-    message: string,
-    history?: Array<{ role: string; content: string }>,
+    messages: string | Array<{ role: string; content: string }>,
     options?: ChatOptions,
   ): Promise<
     AiServiceResponse<{

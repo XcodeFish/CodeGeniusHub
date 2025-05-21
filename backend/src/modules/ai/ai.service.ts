@@ -1,16 +1,29 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { AiConfigService } from './ai-config.service';
 import { AiUsageLog } from './schemas/ai-usage-log.schema';
+import { PromptTemplate } from './schemas/prompt-template.schema';
 import { PromptBuilder } from './utils/prompt-builder';
 import { TokenCounter } from './utils/token-counter';
 import { CodeParser } from './utils/code-parser';
 import { AiServiceResponse } from './interfaces/openai-response.interface';
+import {
+  CreatePromptTemplateDto,
+  UpdatePromptTemplateDto,
+  FilterPromptTemplateDto,
+  TestPromptTemplateDto,
+} from './dto/prompt-template.dto';
 
 @Injectable()
-export class AiService {
+export class AiService implements OnModuleInit {
   private readonly logger = new Logger(AiService.name);
 
   constructor(
@@ -20,7 +33,22 @@ export class AiService {
     private readonly tokenCounter: TokenCounter,
     private readonly codeParser: CodeParser,
     @InjectModel(AiUsageLog.name) private aiUsageLogModel: Model<AiUsageLog>,
+    @InjectModel(PromptTemplate.name)
+    private promptTemplateModel: Model<PromptTemplate>,
   ) {}
+
+  /**
+   * 在模块初始化时创建系统默认提示词模板
+   */
+  async onModuleInit() {
+    try {
+      this.logger.log('初始化系统默认提示词模板...');
+      await this.initSystemPromptTemplates();
+      this.logger.log('系统默认提示词模板初始化完成');
+    } catch (error) {
+      this.logger.error('初始化系统默认提示词模板失败', error.stack);
+    }
+  }
 
   /**
    * 生成代码
@@ -273,7 +301,8 @@ export class AiService {
       await this.checkUserUsageLimit(userId);
 
       // 调用AI聊天
-      const result = await provider.chat(message, options?.history || [], {
+      const result = await provider.chat(message, {
+        history: options?.history || [],
         codeContext: options?.codeContext,
         model: config.model,
         apiKey: config.apiKey,
@@ -349,7 +378,7 @@ export class AiService {
       const prompt = `请解释以下${language}代码，解释详细程度为${detailLevel}，面向${audience}级别的开发者：\n\n\`\`\`\n${code}\n\`\`\`\n\n请提供整体解释，并尽可能按照代码的逻辑结构进行解释。`;
 
       // 调用AI聊天来解释代码
-      const result = await provider.chat(prompt, [], {
+      const result = await provider.chat(prompt, {
         model: config.model,
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
@@ -621,5 +650,425 @@ export class AiService {
    */
   private generateConversationId(): string {
     return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  }
+
+  /**
+   * 创建提示词模板
+   */
+  async createPromptTemplate(dto: CreatePromptTemplateDto) {
+    try {
+      // 检查同名模板是否已存在
+      const existingTemplate = await this.promptTemplateModel.findOne({
+        name: dto.name,
+        type: dto.type,
+      });
+
+      if (existingTemplate) {
+        throw new BadRequestException('同类型下已存在同名模板');
+      }
+
+      // 创建新模板
+      const newTemplate = new this.promptTemplateModel({
+        ...dto,
+        tags: dto.tags || [],
+        isSystem: dto.isSystem || false,
+        isActive: dto.isActive !== undefined ? dto.isActive : true,
+      });
+
+      await newTemplate.save();
+
+      return {
+        code: 0,
+        message: '创建提示词模板成功',
+        data: newTemplate,
+      };
+    } catch (error) {
+      this.logger.error(`创建提示词模板失败: ${error.message}`, error.stack);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(`创建提示词模板失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 更新提示词模板
+   */
+  async updatePromptTemplate(id: string, dto: UpdatePromptTemplateDto) {
+    try {
+      // 验证ObjectId格式
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException('无效的模板ID');
+      }
+
+      // 查找模板
+      const template = await this.promptTemplateModel.findById(id);
+      if (!template) {
+        throw new NotFoundException('提示词模板不存在');
+      }
+
+      // 检查同名模板是否已存在(不包括自己)
+      if (dto.name) {
+        const existingTemplate = await this.promptTemplateModel.findOne({
+          name: dto.name,
+          type: dto.type || template.type,
+          _id: { $ne: id },
+        });
+
+        if (existingTemplate) {
+          throw new BadRequestException('同类型下已存在同名模板');
+        }
+      }
+
+      // 更新模板
+      Object.keys(dto).forEach((key) => {
+        if (dto[key] !== undefined) {
+          template[key] = dto[key];
+        }
+      });
+
+      await template.save();
+
+      return {
+        code: 0,
+        message: '更新提示词模板成功',
+        data: template,
+      };
+    } catch (error) {
+      this.logger.error(`更新提示词模板失败: ${error.message}`, error.stack);
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException(`更新提示词模板失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 删除提示词模板
+   */
+  async deletePromptTemplate(id: string) {
+    try {
+      // 验证ObjectId格式
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException('无效的模板ID');
+      }
+
+      // 查找模板
+      const template = await this.promptTemplateModel.findById(id);
+      if (!template) {
+        throw new NotFoundException('提示词模板不存在');
+      }
+
+      // 不允许删除系统模板
+      if (template.isSystem) {
+        throw new BadRequestException('系统模板不允许删除');
+      }
+
+      // 删除模板
+      await this.promptTemplateModel.findByIdAndDelete(id);
+
+      return {
+        code: 0,
+        message: '删除提示词模板成功',
+        data: { success: true },
+      };
+    } catch (error) {
+      this.logger.error(`删除提示词模板失败: ${error.message}`, error.stack);
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException(`删除提示词模板失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取提示词模板列表
+   */
+  async getPromptTemplates(filter: FilterPromptTemplateDto) {
+    try {
+      // 构建查询条件
+      const query: any = {};
+
+      if (filter.type) {
+        query.type = filter.type;
+      }
+
+      if (filter.isSystem !== undefined) {
+        query.isSystem = filter.isSystem;
+      }
+
+      if (filter.isActive !== undefined) {
+        query.isActive = filter.isActive;
+      }
+
+      if (filter.tags && filter.tags.length > 0) {
+        query.tags = { $in: filter.tags };
+      }
+
+      if (filter.keyword) {
+        query.$or = [
+          { name: { $regex: filter.keyword, $options: 'i' } },
+          { description: { $regex: filter.keyword, $options: 'i' } },
+        ];
+      }
+
+      // 查询模板
+      const templates = await this.promptTemplateModel
+        .find(query)
+        .sort({ isSystem: -1, updatedAt: -1 });
+
+      return {
+        code: 0,
+        message: '获取提示词模板列表成功',
+        data: {
+          templates,
+          total: templates.length,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `获取提示词模板列表失败: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(`获取提示词模板列表失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取提示词模板详情
+   */
+  async getPromptTemplate(id: string) {
+    try {
+      // 验证ObjectId格式
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException('无效的模板ID');
+      }
+
+      // 查找模板
+      const template = await this.promptTemplateModel.findById(id);
+      if (!template) {
+        throw new NotFoundException('提示词模板不存在');
+      }
+
+      return {
+        code: 0,
+        message: '获取提示词模板详情成功',
+        data: template,
+      };
+    } catch (error) {
+      this.logger.error(
+        `获取提示词模板详情失败: ${error.message}`,
+        error.stack,
+      );
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException(`获取提示词模板详情失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 测试提示词模板
+   */
+  async testPromptTemplate(dto: TestPromptTemplateDto) {
+    try {
+      // 获取当前AI提供商
+      const provider = await this.aiConfigService.getCurrentProvider();
+
+      // 获取AI配置
+      const config = await this.aiConfigService.getConfig();
+
+      // 根据模板类型执行不同的测试
+      let result: AiServiceResponse<any>;
+
+      switch (dto.type) {
+        case 'generate':
+          result = await provider.generateCode(dto.input, 'javascript', {
+            customPrompt: dto.template,
+            context: dto.context,
+            maxTokens: Math.min(1000, config.maxTokensGenerate),
+            temperature: config.temperature,
+            model: config.model,
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl,
+          });
+          break;
+
+        case 'analyze':
+          result = await provider.analyzeCode(dto.input, 'javascript', {
+            customPrompt: dto.template,
+            context: dto.context,
+            model: config.model,
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl,
+          });
+          break;
+
+        case 'optimize':
+          result = await provider.optimizeCode(dto.input, 'javascript', {
+            customPrompt: dto.template,
+            context: dto.context,
+            model: config.model,
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl,
+          });
+          break;
+
+        case 'chat':
+        case 'explain':
+        default:
+          // 使用聊天API进行测试
+          result = await provider.chat(
+            [
+              { role: 'system', content: dto.template },
+              { role: 'user', content: dto.input },
+            ],
+            {
+              model: config.model,
+              apiKey: config.apiKey,
+              baseUrl: config.baseUrl,
+            },
+          );
+          break;
+      }
+
+      if (!result.success) {
+        return {
+          code: 1,
+          message: result.error?.message || '模板测试失败',
+          data: null,
+        };
+      }
+
+      return {
+        code: 0,
+        message: '模板测试成功',
+        data: {
+          result: result.data,
+          tokensUsed: result.usage?.totalTokens || 0,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`测试提示词模板失败: ${error.message}`, error.stack);
+      throw new BadRequestException(`测试提示词模板失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 初始化系统默认提示词模板
+   */
+  async initSystemPromptTemplates() {
+    try {
+      const systemTemplates = [
+        {
+          name: '代码生成-通用',
+          description: '通用的代码生成提示词模板，适用于各种编程语言和场景',
+          template: `你是一位专业的代码生成助手，擅长根据需求描述生成高质量、符合最佳实践的代码。请根据提供的需求和上下文，生成清晰、简洁、易于维护的代码。生成的代码应当：
+1. 结构清晰，注释适当
+2. 遵循目标语言/框架的最佳实践
+3. 代码简洁高效，避免冗余
+4. 具备适当的错误处理
+5. 命名规范一致`,
+          type: 'generate',
+          tags: ['通用', '代码生成'],
+          isSystem: true,
+          isActive: true,
+        },
+        {
+          name: '代码分析-通用',
+          description:
+            '通用的代码分析提示词模板，用于评估代码质量并提供改进建议',
+          template: `你是一位代码质量分析专家，擅长发现代码中的问题、优化机会和安全隐患。请对提供的代码进行全面分析，并给出具体的改进建议。分析应当关注：
+1. 代码可读性和可维护性
+2. 潜在的错误和边界情况
+3. 性能问题和优化机会
+4. 安全隐患
+5. 设计模式和架构合理性`,
+          type: 'analyze',
+          tags: ['通用', '代码分析'],
+          isSystem: true,
+          isActive: true,
+        },
+        {
+          name: '代码优化-通用',
+          description: '通用的代码优化提示词模板，用于重构和改进现有代码',
+          template: `你是一位代码优化专家，擅长重构和改进现有代码。请根据优化目标对提供的代码进行改进，同时保持代码功能不变，并详细说明所做的更改。优化应当关注：
+1. 提高代码可读性和可维护性
+2. 改进性能和效率
+3. 减少代码复杂度
+4. 消除冗余
+5. 使用更现代和最佳的编程实践`,
+          type: 'optimize',
+          tags: ['通用', '代码优化'],
+          isSystem: true,
+          isActive: true,
+        },
+        {
+          name: '编程助手-通用',
+          description: '通用的编程助手提示词模板，用于回答编程相关问题',
+          template: `你是一位经验丰富的编程助手，擅长回答各种编程相关问题。请提供准确、清晰、相关的信息，并在必要时补充代码示例。回答应该：
+1. 直接解决用户的问题
+2. 简洁明了，避免不必要的冗长
+3. 提供具体的代码示例或解决方案步骤
+4. 考虑最佳实践和可能的陷阱
+5. 如有多种解决方案，说明各自的优缺点`,
+          type: 'chat',
+          tags: ['通用', '编程助手'],
+          isSystem: true,
+          isActive: true,
+        },
+        {
+          name: '代码解释-通用',
+          description: '通用的代码解释提示词模板，用于解释代码功能和实现逻辑',
+          template: `你是一位代码解释专家，擅长分析代码并以清晰易懂的方式解释其功能和实现逻辑。请对提供的代码进行解释，包括：
+1. 代码的整体功能和目的
+2. 关键算法或设计模式的解释
+3. 各部分代码的功能和相互关系
+4. 特殊技巧或不常见语法的说明
+5. 可能的边界情况或限制`,
+          type: 'explain',
+          tags: ['通用', '代码解释'],
+          isSystem: true,
+          isActive: true,
+        },
+      ];
+
+      // 检查系统模板是否已存在
+      for (const template of systemTemplates) {
+        const existingTemplate = await this.promptTemplateModel.findOne({
+          name: template.name,
+          type: template.type,
+          isSystem: true,
+        });
+
+        if (!existingTemplate) {
+          await this.promptTemplateModel.create(template);
+          this.logger.log(`创建系统提示词模板: ${template.name}`);
+        }
+      }
+
+      return {
+        code: 0,
+        message: '初始化系统提示词模板成功',
+        data: { success: true },
+      };
+    } catch (error) {
+      this.logger.error(
+        `初始化系统提示词模板失败: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(
+        `初始化系统提示词模板失败: ${error.message}`,
+      );
+    }
   }
 }

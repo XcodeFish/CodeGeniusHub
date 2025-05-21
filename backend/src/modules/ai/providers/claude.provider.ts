@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom, TimeoutError } from 'rxjs';
 import { timeout, catchError } from 'rxjs/operators';
 import { AxiosError } from 'axios';
-import { LlmProvider } from '../interfaces/llm-provider.interface';
+import { LlmProvider, ChatOptions } from '../interfaces/llm-provider.interface';
 import { AiServiceResponse } from '../interfaces/openai-response.interface';
 import { TokenCounter } from '../utils/token-counter';
 import { CodeParser } from '../utils/code-parser';
@@ -525,14 +525,8 @@ export class ClaudeProvider implements LlmProvider {
    * 聊天对话
    */
   async chat(
-    message: string,
-    history: Array<{ role: string; content: string }> = [],
-    options?: {
-      codeContext?: string;
-      model?: string;
-      apiKey?: string;
-      baseUrl?: string;
-    },
+    messages: string | Array<{ role: string; content: string }>,
+    options?: ChatOptions,
   ): Promise<
     AiServiceResponse<{
       response: string;
@@ -548,21 +542,40 @@ export class ClaudeProvider implements LlmProvider {
       systemContent += `\n\n以下是当前的代码上下文，你可以参考它来回答问题：\n\`\`\`\n${options.codeContext}\n\`\`\``;
     }
 
-    // 构建消息历史
-    const messages = [
-      ...history.map((h) => ({
-        role: h.role as 'user' | 'assistant',
-        content: h.content,
-      })),
-      { role: 'user' as const, content: message },
-    ];
+    if (options?.customPrompt) {
+      systemContent = options.customPrompt;
+    }
+
+    // 处理消息参数
+    let formattedMessages;
+    if (typeof messages === 'string') {
+      // 如果消息是字符串，将其作为用户消息
+      formattedMessages = [{ role: 'user' as const, content: messages }];
+    } else {
+      // 如果消息是数组，直接使用
+      formattedMessages = messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+    }
+
+    // 使用 options.history 如果存在
+    if (options?.history && options.history.length > 0) {
+      formattedMessages = [
+        ...options.history.map((h) => ({
+          role: h.role as 'user' | 'assistant',
+          content: h.content,
+        })),
+        ...formattedMessages,
+      ];
+    }
 
     const result = await this.sendRequest<ClaudeCompletionResponse>(
       {
         model,
         temperature: 0.7,
         system: systemContent,
-        messages,
+        messages: formattedMessages,
       },
       options?.apiKey,
       options?.baseUrl,

@@ -114,6 +114,154 @@ export class RollbackFileDto {
   commitMessage?: string;
 }
 
+// 添加版本标签DTO
+export class AddVersionTagDto {
+  @ApiProperty({ description: '标签列表', example: ['stable', 'release'] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsNotEmpty()
+  tags: string[];
+
+  @ApiProperty({
+    description: '标签颜色',
+    example: 'green',
+    enum: ['red', 'green', 'blue', 'yellow', 'purple', 'gray'],
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  tagColor?: string;
+
+  @ApiProperty({
+    description: '重要程度',
+    example: 'high',
+    enum: ['low', 'medium', 'high', 'critical'],
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  importance?: string;
+
+  @ApiProperty({
+    description: '是否为发布版本',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  isReleaseVersion?: boolean;
+
+  @ApiProperty({
+    description: '发布说明',
+    example: '修复了关键bug，提升了性能',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  releaseNote?: string;
+
+  @ApiProperty({
+    description: '版本类型',
+    example: 'minor',
+    enum: ['major', 'minor', 'patch'],
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  versionType?: string;
+}
+
+// 版本查询参数DTO
+export class VersionQueryDto {
+  @ApiProperty({
+    description: '按标签筛选',
+    example: 'stable',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  tag?: string;
+
+  @ApiProperty({
+    description: '按重要程度筛选',
+    example: 'high',
+    enum: ['low', 'medium', 'high', 'critical'],
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  importance?: string;
+
+  @ApiProperty({
+    description: '只显示发布版本',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  onlyReleaseVersions?: boolean;
+
+  @ApiProperty({
+    description: '最大版本数',
+    example: 10,
+    required: false,
+  })
+  @IsOptional()
+  limit?: number;
+
+  @ApiProperty({
+    description: '创建者ID',
+    example: '60d0fe4f5311236168a109cc',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  createdBy?: string;
+
+  @ApiProperty({
+    description: '开始时间',
+    example: '2023-01-01T00:00:00Z',
+    required: false,
+  })
+  @IsOptional()
+  startDate?: string;
+
+  @ApiProperty({
+    description: '结束时间',
+    example: '2023-12-31T23:59:59Z',
+    required: false,
+  })
+  @IsOptional()
+  endDate?: string;
+}
+
+// 增强版本差异比较DTO
+export class DiffOptionsDto {
+  @ApiProperty({
+    description: '差异格式',
+    example: 'unified',
+    enum: ['unified', 'json', 'line-by-line'],
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  format?: 'unified' | 'json' | 'line-by-line' = 'unified';
+
+  @ApiProperty({
+    description: '上下文行数',
+    example: 3,
+    required: false,
+  })
+  @IsOptional()
+  contextLines?: number = 3;
+
+  @ApiProperty({
+    description: '忽略空白',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  ignoreWhitespace?: boolean = false;
+}
+
 // 文件响应DTO
 export class FileResponseDto {
   @ApiProperty({ description: '错误码', example: 0 })
@@ -193,6 +341,27 @@ export class FileVersionResponseDto {
 
   @ApiProperty({ description: '是否为回滚版本', example: false })
   isRollback: boolean;
+
+  @ApiProperty({ description: '标签', example: ['stable', 'release'] })
+  tags: string[];
+
+  @ApiProperty({ description: '标签颜色', example: 'green' })
+  tagColor: string;
+
+  @ApiProperty({ description: '重要程度', example: 'high' })
+  importance: string;
+
+  @ApiProperty({ description: '是否为发布版本', example: true })
+  isReleaseVersion: boolean;
+
+  @ApiProperty({
+    description: '发布说明',
+    example: '修复了关键bug，提升了性能',
+  })
+  releaseNote: string;
+
+  @ApiProperty({ description: '版本类型', example: 'minor', nullable: true })
+  versionType: string | null;
 }
 
 // 文件版本列表响应DTO
@@ -236,4 +405,46 @@ export class DiffResponseDto {
     example: '60d0fe4f5311236168a109ce',
   })
   toVersionId: string;
+
+  @ApiProperty({
+    description: '原始版本信息',
+    type: FileVersionResponseDto,
+  })
+  fromVersion: FileVersionResponseDto;
+
+  @ApiProperty({
+    description: '目标版本信息',
+    type: FileVersionResponseDto,
+  })
+  toVersion: FileVersionResponseDto;
+
+  @ApiProperty({
+    description: '差异统计',
+    example: { additions: 1, deletions: 0, changes: 1 },
+  })
+  stats?: { additions: number; deletions: number; changes: number };
+}
+
+// 版本比较结果DTO
+export class CompareVersionsResponseDto {
+  @ApiProperty({ description: '错误码', example: 0 })
+  code: number;
+
+  @ApiProperty({ description: '提示信息', example: '获取成功' })
+  message: string;
+
+  @ApiProperty({ description: '文件ID', example: '60d0fe4f5311236168a109ca' })
+  fileId: string;
+
+  @ApiProperty({ description: '文件名', example: 'index.js' })
+  filename: string;
+
+  @ApiProperty({ description: '项目ID', example: '60d0fe4f5311236168a109cb' })
+  projectId: string;
+
+  @ApiProperty({
+    description: '版本间比较列表',
+    type: [DiffResponseDto],
+  })
+  comparisons: any[];
 }

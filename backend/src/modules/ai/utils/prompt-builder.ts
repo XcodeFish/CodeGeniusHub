@@ -10,6 +10,7 @@ export class PromptBuilder {
     analyze: `你是一位代码质量分析专家，擅长发现代码中的问题、优化机会和安全隐患。请对提供的代码进行全面分析，并给出具体的改进建议。`,
     optimize: `你是一位代码优化专家，擅长重构和改进现有代码。请根据优化目标对提供的代码进行改进，同时保持代码功能不变，并详细说明所做的更改。`,
     chat: `你是一位编程助手，可以回答与编程、开发相关的问题。请尽可能提供准确、有帮助的回答，并在适当时提供代码示例。`,
+    explain: `你是一位代码解释专家，擅长分析代码并以清晰易懂的方式解释其功能和实现逻辑。请对提供的代码进行解释，分析其设计思路和实现细节。`,
   };
 
   constructor(
@@ -21,8 +22,18 @@ export class PromptBuilder {
    * 获取提示模板
    * @param type 模板类型
    * @param name 模板名称(可选)
+   * @param customPrompt 自定义提示词(可选，优先级最高)
    */
-  async getTemplate(type: string, name?: string): Promise<string> {
+  async getTemplate(
+    type: string,
+    name?: string,
+    customPrompt?: string,
+  ): Promise<string> {
+    // 如果提供了自定义提示词，直接返回
+    if (customPrompt) {
+      return customPrompt;
+    }
+
     // 如果提供了名称，查找特定模板
     if (name) {
       const template = await this.promptTemplateModel.findOne({
@@ -59,8 +70,13 @@ export class PromptBuilder {
     language: string;
     framework?: string;
     context?: string;
+    customPrompt?: string;
   }): Promise<string> {
-    const templateText = await this.getTemplate('generate');
+    const templateText = await this.getTemplate(
+      'generate',
+      undefined,
+      params.customPrompt,
+    );
     const { prompt, language, framework, context } = params;
 
     let fullPrompt = templateText + '\n\n';
@@ -91,8 +107,13 @@ export class PromptBuilder {
     language: string;
     analysisLevel?: string;
     context?: string;
+    customPrompt?: string;
   }): Promise<string> {
-    const templateText = await this.getTemplate('analyze');
+    const templateText = await this.getTemplate(
+      'analyze',
+      undefined,
+      params.customPrompt,
+    );
     const { code, language, analysisLevel = 'detailed', context } = params;
 
     let fullPrompt = templateText + '\n\n';
@@ -129,8 +150,13 @@ export class PromptBuilder {
     optimizationGoals?: string[];
     context?: string;
     explanation?: boolean;
+    customPrompt?: string;
   }): Promise<string> {
-    const templateText = await this.getTemplate('optimize');
+    const templateText = await this.getTemplate(
+      'optimize',
+      undefined,
+      params.customPrompt,
+    );
     const {
       code,
       language,
@@ -177,8 +203,13 @@ export class PromptBuilder {
     message: string;
     conversationHistory?: Array<{ role: string; content: string }>;
     codeContext?: string;
+    customPrompt?: string;
   }): Promise<Array<{ role: string; content: string }>> {
-    const templateText = await this.getTemplate('chat');
+    const templateText = await this.getTemplate(
+      'chat',
+      undefined,
+      params.customPrompt,
+    );
     const { message, conversationHistory = [], codeContext } = params;
 
     // 系统提示词
@@ -200,5 +231,47 @@ export class PromptBuilder {
     ];
 
     return fullConversation;
+  }
+
+  /**
+   * 构建代码解释提示
+   */
+  async buildExplainPrompt(params: {
+    code: string;
+    language: string;
+    detailLevel?: string;
+    audience?: string;
+    customPrompt?: string;
+  }): Promise<string> {
+    const templateText = await this.getTemplate(
+      'explain',
+      undefined,
+      params.customPrompt,
+    );
+    const {
+      code,
+      language,
+      detailLevel = 'detailed',
+      audience = 'intermediate',
+    } = params;
+
+    let fullPrompt = templateText + '\n\n';
+
+    fullPrompt += `编程语言: ${language}\n`;
+    fullPrompt += `解释详细程度: ${detailLevel}\n`;
+    fullPrompt += `目标读者: ${audience}\n\n`;
+
+    // 添加需要解释的代码
+    fullPrompt += '需要解释的代码:\n```\n' + code + '\n```\n\n';
+
+    // 添加解释要求
+    fullPrompt += `请对上述代码进行${detailLevel}级别的解释，使${audience}级别的开发者能够理解，包括：
+1. 代码的整体功能和用途
+2. 关键算法或设计模式的解释
+3. 各函数/方法的作用和实现
+4. 可能的边界情况或限制
+5. 代码中的特殊技巧或不常见语法`;
+
+    return fullPrompt;
   }
 }

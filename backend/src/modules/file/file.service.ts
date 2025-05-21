@@ -22,6 +22,9 @@ import {
   MoveFileDto,
   RollbackFileDto,
   FILE_ERROR,
+  AddVersionTagDto,
+  VersionQueryDto,
+  DiffOptionsDto,
 } from './dto/file.dto';
 import { Permission } from '@/modules/user/schemas/user.schema';
 
@@ -425,12 +428,14 @@ export class FileService {
    * @param fileId 文件ID
    * @param projectId 项目ID
    * @param userId 用户ID
+   * @param query 查询参数
    * @returns 版本列表
    */
   async getFileVersions(
     fileId: string,
     projectId: string,
     userId: string,
+    query?: VersionQueryDto,
   ): Promise<FileVersionDocument[]> {
     // 验证用户有项目访问权限
     await this.permissionService.validateProjectAccess(userId, projectId);
@@ -438,13 +443,52 @@ export class FileService {
     // 获取文件
     await this.getFileById(fileId, projectId, userId);
 
-    // 获取文件版本
-    return this.fileVersionModel
-      .find({
-        fileId,
-        projectId,
-      })
+    // 构建查询条件
+    const filter: any = { fileId, projectId };
+
+    // 应用筛选条件
+    if (query) {
+      if (query.tag) {
+        filter.tags = query.tag;
+      }
+
+      if (query.importance) {
+        filter.importance = query.importance;
+      }
+
+      if (query.onlyReleaseVersions) {
+        filter.isReleaseVersion = true;
+      }
+
+      if (query.createdBy) {
+        filter.createdBy = query.createdBy;
+      }
+
+      if (query.startDate || query.endDate) {
+        filter.createdAt = {};
+
+        if (query.startDate) {
+          filter.createdAt.$gte = new Date(query.startDate);
+        }
+
+        if (query.endDate) {
+          filter.createdAt.$lte = new Date(query.endDate);
+        }
+      }
+    }
+
+    // 构建查询
+    let versionsQuery = this.fileVersionModel
+      .find(filter)
       .sort({ versionNumber: -1 });
+
+    // 应用限制条件
+    if (query && query.limit) {
+      versionsQuery = versionsQuery.limit(query.limit);
+    }
+
+    // 获取文件版本
+    return versionsQuery.exec();
   }
 
   /**
@@ -488,7 +532,8 @@ export class FileService {
    * @param fileId 文件ID
    * @param projectId 项目ID
    * @param userId 用户ID
-   * @returns 差异内容
+   * @param options 差异选项
+   * @returns 差异内容和统计信息
    */
   async getFileDiff(
     fromVersionId: string,
@@ -496,7 +541,13 @@ export class FileService {
     fileId: string,
     projectId: string,
     userId: string,
-  ): Promise<string> {
+    options?: DiffOptionsDto,
+  ): Promise<{
+    diff: string;
+    fromVersion: FileVersionDocument;
+    toVersion: FileVersionDocument;
+    stats: { additions: number; deletions: number; changes: number };
+  }> {
     // 获取源版本
     const fromVersion = await this.getFileVersionContent(
       fromVersionId,
@@ -513,16 +564,118 @@ export class FileService {
       userId,
     );
 
-    // 计算差异
-    const changes = diff.createPatch(
-      'file',
-      fromVersion.content,
-      toVersion.content,
-      `版本 ${fromVersion.versionNumber}`,
-      `版本 ${toVersion.versionNumber}`,
-    );
+    // 设置默认选项
+    const diffOptions = {
+      format: options?.format || 'unified',
+      contextLines: options?.contextLines || 3,
+      ignoreWhitespace: options?.ignoreWhitespace || false,
+    };
 
-    return changes;
+    // 预处理内容（如果需要忽略空白）
+    let fromContent = fromVersion.content;
+    let toContent = toVersion.content;
+
+    if (diffOptions.ignoreWhitespace) {
+      fromContent = fromContent.replace(/\s+/g, ' ').trim();
+      toContent = toContent.replace(/\s+/g, ' ').trim();
+    }
+
+    // 计算差异
+    let diffResult: string;
+    const stats = { additions: 0, deletions: 0, changes: 0 };
+
+    if (diffOptions.format === 'unified') {
+      diffResult = diff.createPatch(
+        'file',
+        fromContent,
+        toContent,
+        `版本 ${fromVersion.versionNumber}`,
+        `版本 ${toVersion.versionNumber}`,
+        { context: diffOptions.contextLines },
+      );
+
+      // 分析统计信息
+      const diffLines = diffResult.split('\n').slice(4); // 跳过头部信息
+      for (const line of diffLines) {
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          stats.additions++;
+          stats.changes++;
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+          stats.deletions++;
+          stats.changes++;
+        }
+      }
+    } else if (diffOptions.format === 'json') {
+      const changes = diff.diffLines(fromContent, toContent, {
+        ignoreWhitespace: diffOptions.ignoreWhitespace,
+      });
+
+      // 为JSON格式准备数据
+      const jsonDiff = changes.map((part, index) => {
+        const item: any = {
+          value: part.value,
+          lineNumber: index + 1,
+        };
+
+        if (part.added) {
+          item.type = 'addition';
+          stats.additions += part.count || part.value.split('\n').length - 1;
+          stats.changes += part.count || part.value.split('\n').length - 1;
+        } else if (part.removed) {
+          item.type = 'deletion';
+          stats.deletions += part.count || part.value.split('\n').length - 1;
+          stats.changes += part.count || part.value.split('\n').length - 1;
+        } else {
+          item.type = 'unchanged';
+        }
+
+        return item;
+      });
+
+      diffResult = JSON.stringify(jsonDiff, null, 2);
+    } else {
+      // line-by-line
+      const changes = diff.diffLines(fromContent, toContent, {
+        ignoreWhitespace: diffOptions.ignoreWhitespace,
+      });
+
+      // 为line-by-line格式准备数据
+      let lineByLineDiff = '';
+      let oldLineNum = 1;
+      let newLineNum = 1;
+
+      for (const part of changes) {
+        if (part.added) {
+          const lines = part.value.split('\n');
+          for (let i = 0; i < lines.length - 1; i++) {
+            lineByLineDiff += `+  ${newLineNum++} | ${lines[i]}\n`;
+            stats.additions++;
+            stats.changes++;
+          }
+        } else if (part.removed) {
+          const lines = part.value.split('\n');
+          for (let i = 0; i < lines.length - 1; i++) {
+            lineByLineDiff += `-  ${oldLineNum++} | ${lines[i]}\n`;
+            stats.deletions++;
+            stats.changes++;
+          }
+        } else {
+          const lines = part.value.split('\n');
+          for (let i = 0; i < lines.length - 1; i++) {
+            lineByLineDiff += `   ${oldLineNum++}/${newLineNum++} | ${lines[i]}\n`;
+          }
+        }
+      }
+
+      diffResult = lineByLineDiff;
+    }
+
+    return {
+      diff: diffResult,
+      fromVersion,
+      toVersion,
+      stats,
+    };
   }
 
   /**
@@ -561,6 +714,7 @@ export class FileService {
     // 创建新版本（标记为回滚版本）
     const commitMessage =
       rollbackDto.commitMessage || `回滚到版本 ${targetVersion.versionNumber}`;
+
     const versionNumber = await this.createFileVersion(
       fileId,
       projectId,
@@ -644,6 +798,13 @@ export class FileService {
       commitMessage,
       isRollback,
       rollbackFromVersion,
+      tags: [],
+      tagColor: 'gray',
+      importance: 'medium',
+      isReleaseVersion: false,
+      releaseNote: '',
+      versionType: null,
+      metadata: {},
     });
 
     return versionNumber;
@@ -833,5 +994,197 @@ export class FileService {
     }
 
     return results;
+  }
+
+  /**
+   * 对文件版本添加标签
+   * @param versionId 版本ID
+   * @param fileId 文件ID
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @param tagDto 标签DTO
+   * @returns 更新后的版本
+   */
+  async addVersionTag(
+    versionId: string,
+    fileId: string,
+    projectId: string,
+    userId: string,
+    tagDto: AddVersionTagDto,
+  ): Promise<FileVersionDocument> {
+    // 验证项目存在且用户有编辑权限
+    const project = await this.projectService.getProjectById(projectId, userId);
+    const userRole = this.projectService.getUserRoleInProject(project, userId);
+
+    if (userRole === Permission.VIEWER) {
+      throw new ForbiddenException(FILE_ERROR.PERMISSION_DENIED);
+    }
+
+    // 获取文件版本
+    const version = await this.getFileVersionContent(
+      versionId,
+      fileId,
+      projectId,
+      userId,
+    );
+
+    // 准备更新数据
+    const updateData: any = {
+      tags: Array.from(new Set([...version.tags, ...tagDto.tags])), // 合并并去重
+    };
+
+    // 添加可选字段
+    if (tagDto.tagColor) updateData.tagColor = tagDto.tagColor;
+    if (tagDto.importance) updateData.importance = tagDto.importance;
+    if (tagDto.isReleaseVersion !== undefined)
+      updateData.isReleaseVersion = tagDto.isReleaseVersion;
+    if (tagDto.releaseNote) updateData.releaseNote = tagDto.releaseNote;
+    if (tagDto.versionType) updateData.versionType = tagDto.versionType;
+
+    // 更新版本
+    const updatedVersion = await this.fileVersionModel.findByIdAndUpdate(
+      versionId,
+      { $set: updateData },
+      { new: true },
+    );
+
+    if (!updatedVersion) {
+      throw new NotFoundException(FILE_ERROR.NOT_FOUND);
+    }
+
+    return updatedVersion;
+  }
+
+  /**
+   * 删除文件版本标签
+   * @param versionId 版本ID
+   * @param fileId 文件ID
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @param tag 标签
+   * @returns 更新后的版本
+   */
+  async removeVersionTag(
+    versionId: string,
+    fileId: string,
+    projectId: string,
+    userId: string,
+    tag: string,
+  ): Promise<FileVersionDocument> {
+    // 验证项目存在且用户有编辑权限
+    const project = await this.projectService.getProjectById(projectId, userId);
+    const userRole = this.projectService.getUserRoleInProject(project, userId);
+
+    if (userRole === Permission.VIEWER) {
+      throw new ForbiddenException(FILE_ERROR.PERMISSION_DENIED);
+    }
+
+    // 获取文件版本
+    const version = await this.getFileVersionContent(
+      versionId,
+      fileId,
+      projectId,
+      userId,
+    );
+
+    // 更新版本标签
+    const updatedVersion = await this.fileVersionModel.findByIdAndUpdate(
+      versionId,
+      { $pull: { tags: tag } },
+      { new: true },
+    );
+
+    if (!updatedVersion) {
+      throw new NotFoundException(FILE_ERROR.NOT_FOUND);
+    }
+
+    return updatedVersion;
+  }
+
+  /**
+   * 比较多个版本
+   * @param fileId 文件ID
+   * @param projectId 项目ID
+   * @param userId 用户ID
+   * @param versionIds 版本ID列表
+   * @param options 差异选项
+   * @returns 版本比较结果
+   */
+  async compareVersions(
+    fileId: string,
+    projectId: string,
+    userId: string,
+    versionIds: string[],
+    options?: DiffOptionsDto,
+  ): Promise<{
+    fileId: string;
+    filename: string;
+    projectId: string;
+    comparisons: {
+      diff: string;
+      fromVersion: FileVersionDocument;
+      toVersion: FileVersionDocument;
+      stats: { additions: number; deletions: number; changes: number };
+    }[];
+  }> {
+    // 验证用户有项目访问权限
+    await this.permissionService.validateProjectAccess(userId, projectId);
+
+    // 获取文件
+    const file = await this.getFileById(fileId, projectId, userId);
+
+    if (versionIds.length < 2) {
+      throw new BadRequestException('至少需要两个版本进行比较');
+    }
+
+    // 获取所有版本
+    const versions: FileVersionDocument[] = [];
+    for (const versionId of versionIds) {
+      const version = await this.getFileVersionContent(
+        versionId,
+        fileId,
+        projectId,
+        userId,
+      );
+      versions.push(version);
+    }
+
+    // 对版本按版本号排序
+    versions.sort((a, b) => a.versionNumber - b.versionNumber);
+
+    // 计算相邻版本之间的差异
+    const comparisons: {
+      diff: string;
+      fromVersion: FileVersionDocument;
+      toVersion: FileVersionDocument;
+      stats: { additions: number; deletions: number; changes: number };
+    }[] = [];
+    for (let i = 0; i < versions.length - 1; i++) {
+      const fromVersion = versions[i];
+      const toVersion = versions[i + 1];
+
+      const diffResult = await this.getFileDiff(
+        fromVersion._id.toString(),
+        toVersion._id.toString(),
+        fileId,
+        projectId,
+        userId,
+        options,
+      );
+
+      comparisons.push({
+        diff: diffResult.diff,
+        fromVersion: diffResult.fromVersion,
+        toVersion: diffResult.toVersion,
+        stats: diffResult.stats,
+      });
+    }
+
+    return {
+      fileId,
+      filename: file.filename,
+      projectId,
+      comparisons,
+    };
   }
 }

@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom, TimeoutError, throwError, timer } from 'rxjs';
 import { timeout, catchError, retryWhen, mergeMap } from 'rxjs/operators';
 import { AxiosError } from 'axios';
-import { LlmProvider } from '../interfaces/llm-provider.interface';
+import { LlmProvider, ChatOptions } from '../interfaces/llm-provider.interface';
 import { AiServiceResponse } from '../interfaces/openai-response.interface';
 import { TokenCounter } from '../utils/token-counter';
 import { CodeParser } from '../utils/code-parser';
@@ -481,14 +481,8 @@ export class LocalLlmProvider implements LlmProvider {
    * 聊天对话
    */
   async chat(
-    message: string,
-    history: Array<{ role: string; content: string }> = [],
-    options?: {
-      codeContext?: string;
-      model?: string;
-      apiKey?: string;
-      baseUrl?: string;
-    },
+    messages: string | Array<{ role: string; content: string }>,
+    options?: ChatOptions,
   ): Promise<
     AiServiceResponse<{
       response: string;
@@ -505,18 +499,47 @@ export class LocalLlmProvider implements LlmProvider {
       systemContent += `\n\n当前代码上下文:\n\`\`\`\n${options.codeContext}\n\`\`\``;
     }
 
-    // 构建完整的对话历史
-    const messages = [
-      { role: 'system', content: systemContent },
-      ...history,
-      { role: 'user', content: message },
-    ];
+    // 如果有自定义提示词，使用自定义提示词替换系统提示
+    if (options?.customPrompt) {
+      systemContent = options.customPrompt;
+    }
+
+    // 处理消息参数
+    let formattedMessages;
+
+    if (typeof messages === 'string') {
+      // 如果消息是字符串，将其作为用户消息
+      formattedMessages = [
+        { role: 'system', content: systemContent },
+        { role: 'user', content: messages },
+      ];
+    } else {
+      // 如果消息是数组，在前面添加系统消息
+      formattedMessages = [
+        { role: 'system', content: systemContent },
+        ...messages,
+      ];
+    }
+
+    // 使用 options.history 如果存在
+    if (options?.history && options.history.length > 0) {
+      // 移除之前的系统消息，以避免重复
+      const messagesWithoutSystem = formattedMessages.filter(
+        (m) => m.role !== 'system',
+      );
+
+      formattedMessages = [
+        { role: 'system', content: systemContent },
+        ...options.history,
+        ...messagesWithoutSystem,
+      ];
+    }
 
     const result = await this.sendRequest<any>(
       '/chat/completions',
       {
         model,
-        messages,
+        messages: formattedMessages,
         temperature: 0.7,
       },
       options?.apiKey,

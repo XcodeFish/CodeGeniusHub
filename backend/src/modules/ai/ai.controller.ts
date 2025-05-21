@@ -8,6 +8,8 @@ import {
   BadRequestException,
   Query,
   Param,
+  Delete,
+  Put,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -32,6 +34,12 @@ import {
   TestAiConfigDto,
   GetUsageStatsDto,
 } from './dto/ai-config.dto';
+import {
+  CreatePromptTemplateDto,
+  UpdatePromptTemplateDto,
+  FilterPromptTemplateDto,
+  TestPromptTemplateDto,
+} from './dto/prompt-template.dto';
 
 @ApiTags('AI')
 @Controller('ai')
@@ -284,14 +292,106 @@ export class AiController {
   @Get('providers')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '获取支持的AI提供商及模型信息' })
+  @ApiOperation({ summary: '获取支持的AI提供商' })
   async getSupportedProviders() {
     const providers = this.aiConfigService.getSupportedProviders();
 
     return {
       code: 0,
-      message: '获取支持的AI提供商成功',
+      message: '获取AI提供商列表成功',
       data: providers,
     };
+  }
+
+  // 提示词模板管理相关接口
+
+  @Post('prompt-templates')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '创建提示词模板' })
+  @ApiBody({ type: CreatePromptTemplateDto })
+  @ApiResponse({ status: 201, description: '创建成功' })
+  async createPromptTemplate(@Body() dto: CreatePromptTemplateDto) {
+    return this.aiService.createPromptTemplate(dto);
+  }
+
+  @Put('prompt-templates/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '更新提示词模板' })
+  @ApiParam({ name: 'id', description: '模板ID' })
+  @ApiBody({ type: UpdatePromptTemplateDto })
+  @ApiResponse({ status: 200, description: '更新成功' })
+  async updatePromptTemplate(
+    @Param('id') id: string,
+    @Body() dto: UpdatePromptTemplateDto,
+  ) {
+    return this.aiService.updatePromptTemplate(id, dto);
+  }
+
+  @Delete('prompt-templates/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '删除提示词模板' })
+  @ApiParam({ name: 'id', description: '模板ID' })
+  @ApiResponse({ status: 200, description: '删除成功' })
+  async deletePromptTemplate(@Param('id') id: string) {
+    return this.aiService.deletePromptTemplate(id);
+  }
+
+  @Get('prompt-templates')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取提示词模板列表' })
+  @ApiQuery({ name: 'type', required: false, description: '模板类型' })
+  @ApiQuery({ name: 'keyword', required: false, description: '搜索关键词' })
+  @ApiQuery({ name: 'isSystem', required: false, description: '是否系统模板' })
+  @ApiQuery({ name: 'isActive', required: false, description: '是否激活' })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    description: '标签筛选，多个标签用逗号分隔',
+  })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async getPromptTemplates(@Query() query: FilterPromptTemplateDto) {
+    // 处理标签筛选参数
+    if (typeof query.tags === 'string') {
+      query.tags = (query.tags as string).split(',');
+    }
+
+    return this.aiService.getPromptTemplates(query);
+  }
+
+  @Get('prompt-templates/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取提示词模板详情' })
+  @ApiParam({ name: 'id', description: '模板ID' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  async getPromptTemplate(@Param('id') id: string) {
+    return this.aiService.getPromptTemplate(id);
+  }
+
+  @Post('prompt-templates/test')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '测试提示词模板' })
+  @ApiBody({ type: TestPromptTemplateDto })
+  @ApiResponse({ status: 200, description: '测试成功' })
+  async testPromptTemplate(@Body() dto: TestPromptTemplateDto) {
+    return this.aiService.testPromptTemplate(dto);
+  }
+
+  @Post('prompt-templates/init')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '初始化系统提示词模板' })
+  @ApiResponse({ status: 200, description: '初始化成功' })
+  async initSystemPromptTemplates() {
+    return this.aiService.initSystemPromptTemplates();
   }
 }

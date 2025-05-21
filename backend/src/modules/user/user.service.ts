@@ -5,8 +5,12 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { User, UserDocument } from './schemas/user.schema';
-import { CreateUserDto } from './dto/user.dto';
+import { User, UserDocument, Permission, Module } from './schemas/user.schema';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  UpdateUserModulesDto,
+} from './dto/user.dto';
 import * as bcrypt from 'bcrypt'; // 引入bcrypt用于密码哈希
 import { isValidObjectId } from 'mongoose';
 
@@ -153,5 +157,46 @@ export class UserService {
 
     // 查找并删除用户
     return this.userModel.findByIdAndDelete(id).exec();
+  }
+
+  /**
+   * 设置用户功能模块
+   * @param userId - 用户ID
+   * @param modules - 功能模块列表
+   * @param requesterPermission - 请求方的权限 (用于权限检查)
+   * @returns Promise<User | null> - 更新后的用户对象或null
+   */
+  async setUserModules(
+    userId: string,
+    modules: Module[],
+    requesterPermission: string,
+  ): Promise<User | null> {
+    // 只有admin用户才能设置功能模块
+    if (requesterPermission !== Permission.ADMIN) {
+      throw new ForbiddenException('只有管理员可以设置用户功能模块');
+    }
+
+    if (!isValidObjectId(userId)) {
+      throw new BadRequestException('用户ID格式不正确');
+    }
+
+    // 查找并更新用户
+    return this.userModel
+      .findByIdAndUpdate(userId, { modules }, { new: true })
+      .exec();
+  }
+
+  /**
+   * 获取用户功能模块
+   * @param userId - 用户ID
+   * @returns Promise<Module[]> - 功能模块列表
+   */
+  async getUserModules(userId: string): Promise<Module[]> {
+    if (!isValidObjectId(userId)) {
+      throw new BadRequestException('用户ID格式不正确');
+    }
+
+    const user = await this.userModel.findById(userId).exec();
+    return user?.modules || [];
   }
 }

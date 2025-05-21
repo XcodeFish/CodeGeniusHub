@@ -243,58 +243,17 @@ export class ProjectService {
    * 添加项目成员
    * @param projectId 项目ID
    * @param userId 当前用户ID
-   * @param memberDto 成员信息
+   * @param memberDto 新成员信息
    * @returns 更新后的项目
    */
-
   async addProjectMember(
     projectId: string,
     userId: string,
     memberDto: AddMemberDto,
   ): Promise<ProjectDocument> {
-    try {
-      // 获取项目并检查权限
-      const project = await this.getProjectById(projectId, userId);
-
-      // 检查用户是否为管理员
-      if (!this.isProjectAdmin(project, userId)) {
-        throw new ForbiddenException(PROJECT_ERROR.NO_PERMISSION);
-      }
-
-      // 验证要添加的用户是否存在
-      const memberExists = await this.userModel.exists({
-        _id: memberDto.userId,
-      });
-      if (!memberExists) {
-        throw new NotFoundException(PROJECT_ERROR.USER_NOT_FOUND);
-      }
-
-      // 检查用户是否已经是成员
-      const existingMember = project.members.find(
-        (member) => member.userId.toString() === memberDto.userId,
-      );
-
-      if (existingMember) {
-        throw new BadRequestException(PROJECT_ERROR.MEMBER_ALREADY_EXISTS);
-      }
-
-      // 添加成员
-      project.members.push({
-        userId: memberDto.userId,
-        permission: memberDto.permission,
-        joinedAt: new Date(),
-      });
-
-      // 更新协作者计数
-      project.collaboratorsCount = project.members.length;
-
-      return project.save();
-    } catch (error) {
-      if (error.name === 'CastError') {
-        throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
-      }
-      throw error;
-    }
+    return this.addProjectMembers(projectId, userId, {
+      members: [memberDto],
+    });
   }
 
   /**
@@ -311,42 +270,76 @@ export class ProjectService {
   ): Promise<ProjectDocument> {
     try {
       // 获取项目并检查权限
-      const project = await this.getProjectById(projectId, userId);
+      const project = await this.projectModel.findById(projectId);
+      if (!project) {
+        throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
+      }
 
-      // 检查用户是否为管理员
+      // 检查当前用户是否为管理员
       if (!this.isProjectAdmin(project, userId)) {
         throw new ForbiddenException(PROJECT_ERROR.NO_PERMISSION);
       }
 
-      // 验证所有用户是否存在
-      const userIds = membersDto.members.map((m) => m.userId);
-      const existingUsers = await this.userModel.find(
-        { _id: { $in: userIds } },
-        '_id',
-      );
+      // 跟踪是否有变更
+      let hasChanges = false;
 
-      if (existingUsers.length !== userIds.length) {
-        throw new BadRequestException(PROJECT_ERROR.USER_NOT_FOUND);
+      // 批量添加成员
+      for (const memberDto of membersDto.members) {
+        // 检查要添加的用户是否存在
+        const memberUser = await this.userModel.findById(memberDto.userId);
+        if (!memberUser) {
+          continue; // 跳过不存在的用户
+        }
+
+        // 检查用户是否已经是项目成员
+        const existingMemberIndex = project.members.findIndex(
+          (m) => m.userId.toString() === memberDto.userId,
+        );
+
+        if (existingMemberIndex !== -1) {
+          // 只有当权限发生变化时才更新
+          if (
+            project.members[existingMemberIndex].permission !==
+            memberDto.permission
+          ) {
+            project.members[existingMemberIndex].permission =
+              memberDto.permission;
+            hasChanges = true;
+          }
+        } else {
+          // 添加新成员
+          project.members.push({
+            userId: memberDto.userId,
+            permission: memberDto.permission,
+            joinedAt: new Date(),
+          });
+          hasChanges = true;
+        }
+
+        // 更新用户的项目权限列表
+        await this.updateUserProjectPermissions(
+          memberDto.userId,
+          projectId,
+          project.name,
+          memberDto.permission,
+        );
       }
 
-      // 过滤掉已存在的成员
-      const existingMemberIds = project.members.map((m) => m.userId.toString());
-      const newMembers = membersDto.members.filter(
-        (m) => !existingMemberIds.includes(m.userId),
-      );
-      // 添加新成员
-      for (const member of newMembers) {
-        project.members.push({
-          userId: member.userId,
-          permission: member.permission,
-          joinedAt: new Date(),
-        });
+      // 只有在有变更时才更新项目
+      if (hasChanges) {
+        // 更新项目协作者数量
+        project.collaboratorsCount = project.members.length;
+
+        // 保存项目更新
+        await project.save();
       }
 
-      // 更新协作者计数
-      project.collaboratorsCount = project.members.length;
-
-      return project.save();
+      // 返回更新后的项目
+      return this.projectModel
+        .findById(projectId)
+        .populate('createdBy', 'username email avatar')
+        .populate('members.userId', 'username email avatar')
+        .exec() as Promise<ProjectDocument>;
     } catch (error) {
       if (error.name === 'CastError') {
         throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
@@ -356,11 +349,11 @@ export class ProjectService {
   }
 
   /**
-   * 更新项目成员角色
+   * 更新项目成员权限
    * @param projectId 项目ID
    * @param userId 当前用户ID
-   * @param memberId 成员ID
-   * @param updateDto 角色更新信息
+   * @param memberId 要更新的成员ID
+   * @param updateDto 更新的权限信息
    * @returns 更新后的项目
    */
   async updateProjectMember(
@@ -371,30 +364,49 @@ export class ProjectService {
   ): Promise<ProjectDocument> {
     try {
       // 获取项目并检查权限
-      const project = await this.getProjectById(projectId, userId);
+      const project = await this.projectModel.findById(projectId);
+      if (!project) {
+        throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
+      }
 
-      // 检查用户是否为管理员
+      // 检查当前用户是否为管理员
       if (!this.isProjectAdmin(project, userId)) {
         throw new ForbiddenException(PROJECT_ERROR.NO_PERMISSION);
       }
 
-      // 检查是否为项目创建者 (创建者角色不能被修改)
-      if (project.createdBy.toString() === memberId) {
-        throw new BadRequestException(PROJECT_ERROR.OWNER_ROLE_CANNOT_CHANGE);
-      }
-
-      // 查找并更新成员
+      // 检查要更新的成员是否存在
       const memberIndex = project.members.findIndex(
-        (member) => member.userId.toString() === memberId,
+        (m) => m.userId.toString() === memberId,
       );
-
       if (memberIndex === -1) {
         throw new NotFoundException(PROJECT_ERROR.MEMBER_NOT_FOUND);
       }
 
-      // 更新角色
+      // 检查是否试图修改创建者的权限
+      if (project.createdBy.toString() === memberId) {
+        throw new BadRequestException(PROJECT_ERROR.OWNER_ROLE_CANNOT_CHANGE);
+      }
+
+      // 更新成员权限
       project.members[memberIndex].permission = updateDto.permission;
-      return project.save();
+
+      // 保存项目更新
+      await project.save();
+
+      // 更新用户的项目权限列表
+      await this.updateUserProjectPermissions(
+        memberId,
+        projectId,
+        project.name,
+        updateDto.permission,
+      );
+
+      // 返回更新后的项目
+      return this.projectModel
+        .findById(projectId)
+        .populate('createdBy', 'username email avatar')
+        .populate('members.userId', 'username email avatar')
+        .exec() as Promise<ProjectDocument>;
     } catch (error) {
       if (error.name === 'CastError') {
         throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
@@ -417,34 +429,47 @@ export class ProjectService {
   ): Promise<ProjectDocument> {
     try {
       // 获取项目并检查权限
-      const project = await this.getProjectById(projectId, userId);
-
-      // 检查是否为项目创建者 (创建者不能被移除)
-      if (project.createdBy.toString() === memberId) {
-        throw new BadRequestException(PROJECT_ERROR.OWNER_CANNOT_LEAVE);
+      const project = await this.projectModel.findById(projectId);
+      if (!project) {
+        throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
       }
 
-      // 如果是自己离开项目，或者是管理员移除成员，则允许操作
-      if (userId !== memberId && !this.isProjectAdmin(project, userId)) {
+      // 检查当前用户是否为管理员
+      if (!this.isProjectAdmin(project, userId)) {
         throw new ForbiddenException(PROJECT_ERROR.NO_PERMISSION);
       }
 
-      // 查找成员
+      // 检查要移除的成员是否存在
       const memberIndex = project.members.findIndex(
-        (member) => member.userId.toString() === memberId,
+        (m) => m.userId.toString() === memberId,
       );
-
       if (memberIndex === -1) {
         throw new NotFoundException(PROJECT_ERROR.MEMBER_NOT_FOUND);
+      }
+
+      // 检查是否试图移除创建者
+      if (project.createdBy.toString() === memberId) {
+        throw new BadRequestException(PROJECT_ERROR.OWNER_CANNOT_LEAVE);
       }
 
       // 移除成员
       project.members.splice(memberIndex, 1);
 
-      // 更新协作者计数
+      // 更新项目协作者数量
       project.collaboratorsCount = project.members.length;
 
-      return project.save();
+      // 保存项目更新
+      await project.save();
+
+      // 从用户的项目权限列表中移除此项目
+      await this.removeUserProjectPermission(memberId, projectId);
+
+      // 返回更新后的项目
+      return this.projectModel
+        .findById(projectId)
+        .populate('createdBy', 'username email avatar')
+        .populate('members.userId', 'username email avatar')
+        .exec() as Promise<ProjectDocument>;
     } catch (error) {
       if (error.name === 'CastError') {
         throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
@@ -541,6 +566,80 @@ export class ProjectService {
       return true;
     } catch (error) {
       console.error('更新项目文件计数失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 更新用户的项目权限列表
+   * @param userId 用户ID
+   * @param projectId 项目ID
+   * @param projectName 项目名称
+   * @param permission 权限
+   * @returns 是否成功
+   */
+  private async updateUserProjectPermissions(
+    userId: string,
+    projectId: string,
+    projectName: string,
+    permission: Permission,
+  ): Promise<boolean> {
+    try {
+      const user = await this.userModel.findById(userId);
+      if (!user) return false;
+
+      // 查找用户的项目权限列表中是否已存在该项目
+      const existingPermissionIndex = user.projectPermissions?.findIndex(
+        (p) => p.projectId === projectId,
+      );
+
+      if (existingPermissionIndex !== -1 && user.projectPermissions) {
+        // 更新现有权限
+        user.projectPermissions[existingPermissionIndex].permission =
+          permission;
+      } else {
+        // 添加新权限
+        if (!user.projectPermissions) {
+          user.projectPermissions = [];
+        }
+        user.projectPermissions.push({
+          projectId,
+          projectName,
+          permission,
+        });
+      }
+
+      await user.save();
+      return true;
+    } catch (error) {
+      console.error('更新用户项目权限失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 从用户的项目权限列表中移除指定项目
+   * @param userId 用户ID
+   * @param projectId 项目ID
+   * @returns 是否成功
+   */
+  private async removeUserProjectPermission(
+    userId: string,
+    projectId: string,
+  ): Promise<boolean> {
+    try {
+      const user = await this.userModel.findById(userId);
+      if (!user || !user.projectPermissions) return false;
+
+      // 过滤掉要移除的项目权限
+      user.projectPermissions = user.projectPermissions.filter(
+        (p) => p.projectId !== projectId,
+      );
+
+      await user.save();
+      return true;
+    } catch (error) {
+      console.error('移除用户项目权限失败:', error);
       return false;
     }
   }

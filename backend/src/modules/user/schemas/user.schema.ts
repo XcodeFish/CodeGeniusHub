@@ -11,6 +11,23 @@ export enum Permission {
   ADMIN = 'admin',
 }
 
+// 项目权限接口
+export interface ProjectPermission {
+  projectId: string;
+  projectName: string;
+  permission: Permission;
+}
+
+// 功能模块接口
+export interface Module {
+  moduleId: string;
+  moduleName: string;
+  modulePath: string;
+  moduleIcon?: string;
+  moduleOrder: number;
+  children?: Module[];
+}
+
 @Schema({ timestamps: true }) // 添加时间戳，记录创建和更新时间
 export class User {
   // 用户ID由MongoDB自动生成_id，这里不再显式定义uuid
@@ -29,6 +46,14 @@ export class User {
 
   @Prop({ required: true, default: Permission.VIEWER }) // 默认权限为Viewer
   permission: Permission;
+
+  // 项目权限列表
+  @Prop({ type: Array, default: [] })
+  projectPermissions: ProjectPermission[];
+
+  // 功能模块列表（用于前端展示）
+  @Prop({ type: Array, default: [] })
+  modules: Module[];
 
   // 其他用户相关字段可以根据需要添加，例如头像、昵称等
   @Prop({ required: false })
@@ -63,8 +88,11 @@ UserSchema.pre('save', async function (next) {
   next();
 });
 
-// 可能需要其他索引以优化查询
+// 添加各种索引以优化查询
 UserSchema.index({ email: 1 });
 UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ phone: 1 }, { unique: true, sparse: true });
 UserSchema.index({ forgotPasswordCode: 1 }, { unique: true, sparse: true });
+UserSchema.index({ permission: 1 }); // 添加对权限的索引，加速按权限查询
+UserSchema.index({ 'projectPermissions.projectId': 1 }); // 添加对项目权限的索引
+UserSchema.index({ 'modules.moduleId': 1 }); // 添加对功能模块的索引

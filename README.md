@@ -933,3 +933,253 @@ graph TD
 - **CSRF防护**：对Web端敏感操作接口增加CSRF Token校验。
 - **输入校验与防注入**：所有输入参数后端严格校验，防止SQL/NoSQL注入、XSS等攻击。
 - **操作日志与审计**：关键操作（如权限变更、删除项目）需记录操作日志，便于追溯。
+
+## 项目结构
+
+```
+backend/
+  ├── src/
+  │   ├── modules/
+  │   │   ├── user/
+  │   │   ├── project/
+  │   │   └── module/
+  │   └── ...
+  └── ...
+frontend/
+  └── ...
+docs/
+  └── ...
+```
+
+## 用户模型设计
+
+### 数据结构
+
+```typescript
+interface User {
+  // 基础信息
+  id: string;
+  username: string;
+  email: string;
+  password: string;
+
+  // 系统权限
+  systemPermission: 'admin' | 'editor' | 'viewer';
+
+  // 项目权限列表
+  projectPermissions: {
+    projectId: string;    // 项目ID
+    projectName: string;  // 项目名称
+    permission: 'admin' | 'editor' | 'viewer';
+  }[];
+
+  // 功能模块列表（用于前端展示）
+  modules: {
+    moduleId: string;      // 模块ID
+    moduleName: string;    // 模块名称
+    modulePath: string;    // 模块路径
+    moduleIcon?: string;   // 模块图标
+    moduleOrder: number;   // 模块排序
+    children?: {          // 子模块
+      moduleId: string;
+      moduleName: string;
+      modulePath: string;
+      moduleIcon?: string;
+      moduleOrder: number;
+    }[];
+  }[];
+}
+```
+
+### 字段说明
+
+1. **系统权限 (systemPermission)**
+   - 类型：枚举值
+   - 可选值：'admin' | 'editor' | 'viewer'
+   - 说明：
+     - admin：可以访问所有功能模块，可以分配用户权限
+     - editor：可以访问被分配的功能模块，可以编辑内容
+     - viewer：只能查看被分配的功能模块
+
+2. **项目权限列表 (projectPermissions)**
+   - 类型：数组
+   - 结构：
+
+     ```typescript
+     {
+       projectId: string;    // 项目ID
+       projectName: string;  // 项目名称
+       permission: string;   // 项目权限级别
+     }
+     ```
+
+   - 说明：存储用户对各个项目的权限
+
+3. **功能模块列表 (modules)**
+   - 类型：数组
+   - 结构：
+
+     ```typescript
+     {
+       moduleId: string;      // 模块ID
+       moduleName: string;    // 模块名称
+       modulePath: string;    // 模块路径
+       moduleIcon?: string;   // 模块图标
+       moduleOrder: number;   // 模块排序
+       children?: {          // 子模块
+         moduleId: string;
+         moduleName: string;
+         modulePath: string;
+         moduleIcon?: string;
+         moduleOrder: number;
+       }[];
+     }
+     ```
+
+   - 说明：用于前端展示的模块列表，包含模块的基本信息和层级结构
+
+### 数据结构示例
+
+```typescript
+// 用户数据示例
+const user = {
+  id: "user123",
+  username: "张三",
+  email: "zhangsan@example.com",
+  password: "hashedPassword",
+  systemPermission: "editor",
+
+  // 项目权限
+  projectPermissions: [
+    {
+      projectId: "projectA",
+      projectName: "项目A",
+      permission: "viewer"
+    },
+    {
+      projectId: "projectB",
+      projectName: "项目B",
+      permission: "editor"
+    },
+    {
+      projectId: "projectC",
+      projectName: "项目C",
+      permission: "admin"
+    }
+  ],
+
+  // 功能模块列表
+  modules: [
+    {
+      moduleId: "dashboard",
+      moduleName: "仪表盘",
+      modulePath: "/dashboard",
+      moduleIcon: "dashboard",
+      moduleOrder: 1
+    },
+    {
+      moduleId: "project",
+      moduleName: "项目管理",
+      modulePath: "/project",
+      moduleIcon: "project",
+      moduleOrder: 2,
+      children: [
+        {
+          moduleId: "project-list",
+          moduleName: "项目列表",
+          modulePath: "/project/list",
+          moduleIcon: "list",
+          moduleOrder: 1
+        },
+        {
+          moduleId: "project-settings",
+          moduleName: "项目设置",
+          modulePath: "/project/settings",
+          moduleIcon: "settings",
+          moduleOrder: 2
+        }
+      ]
+    },
+    {
+      moduleId: "user",
+      moduleName: "用户管理",
+      modulePath: "/user",
+      moduleIcon: "user",
+      moduleOrder: 3
+    }
+  ]
+};
+```
+
+### 权限检查逻辑
+
+1. **系统权限检查**
+
+   ```typescript
+   function checkSystemPermission(user: User, requiredPermission: string): boolean {
+     return user.systemPermission === 'admin' || user.systemPermission === requiredPermission;
+   }
+   ```
+
+2. **项目权限检查**
+
+   ```typescript
+   function checkProjectPermission(user: User, projectId: string, requiredPermission: string): boolean {
+     // 系统管理员拥有所有权限
+     if (user.systemPermission === 'admin') return true;
+
+     const projectPermission = user.projectPermissions.find(p => p.projectId === projectId);
+     return projectPermission?.permission === requiredPermission;
+   }
+   ```
+
+3. **功能模块权限检查**
+
+   ```typescript
+   function checkModulePermission(user: User, moduleId: string, requiredPermission: string): boolean {
+     // 系统管理员拥有所有权限
+     if (user.systemPermission === 'admin') return true;
+
+     // 根据系统权限判断
+     switch (user.systemPermission) {
+       case 'admin':
+         return true;
+       case 'editor':
+         return requiredPermission !== 'admin'; // editor不能执行admin操作
+       case 'viewer':
+         return requiredPermission === 'viewer'; // viewer只能查看
+       default:
+         return false;
+     }
+   }
+   ```
+
+4. **获取用户可访问的模块列表**
+
+   ```typescript
+   function getUserAccessibleModules(user: User): Module[] {
+     // 系统管理员可以访问所有模块
+     if (user.systemPermission === 'admin') {
+       return user.modules;
+     }
+
+     // 根据系统权限过滤模块
+     return user.modules.filter(module => {
+       // 检查模块权限
+       const hasAccess = checkModulePermission(user, module.moduleId, user.systemPermission);
+
+       // 如果有子模块，递归检查子模块权限
+       if (module.children) {
+         module.children = module.children.filter(child =>
+           checkModulePermission(user, child.moduleId, user.systemPermission)
+         );
+       }
+
+       return hasAccess;
+     });
+   }
+   ```
+
+## 权限体系说明
+
+详细的权限体系说明请参考 [权限体系文档](docs/user-project-permission-flow.md)

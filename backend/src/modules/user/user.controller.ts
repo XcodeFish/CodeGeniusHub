@@ -11,16 +11,24 @@ import {
   ForbiddenException, // 引入ForbiddenException处理权限不足的情况
   InternalServerErrorException,
   Post,
+  HttpStatus,
+  HttpException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard'; // 假设存在用于HTTP的JwtAuthGuard
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Public } from '@/common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator'; // 引入Roles装饰器
-import { UpdateUserDto, CreateUserDto } from './dto/user.dto'; // 引入UpdateUserDto和CreateUserDto
-import { User, UserDocument } from './schemas/user.schema'; // 引入User Schema
+import {
+  UpdateUserDto,
+  CreateUserDto,
+  UpdateUserModulesDto,
+  UserResponseDto,
+} from './dto/user.dto'; // 引入UserResponseDto
+import { User, UserDocument, Module } from './schemas/user.schema'; // 引入User Schema
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger'; // 引入swagger装饰器
 import { USER_ERROR } from '../../common/constants/error-codes';
+import { Permission } from '../user/schemas/user.schema'; // 修正导入路径
 
 @Controller('user') // 定义基础路由 /user
 @ApiTags('用户模块')
@@ -34,36 +42,45 @@ export class UserController {
    * 用户只能获取自己的信息，管理员可以获取所有用户信息。
    * @param id - 用户ID
    * @param req - 请求对象，用于获取当前用户信息
-   * @returns Promise<User> - 用户对象 (已过滤敏感信息)
+   * @returns Promise<UserResponseDto> - 用户对象 (已过滤敏感信息)
    */
   @Get(':id')
   @ApiOperation({ summary: '根据用户ID获取用户信息' })
-  @ApiResponse({ status: 200, description: '获取成功，返回用户信息' })
+  @ApiResponse({
+    status: 200,
+    description: '获取成功，返回用户信息',
+    type: UserResponseDto,
+  })
   @ApiResponse({ status: 403, description: '无权限访问' })
   @ApiResponse({ status: 404, description: '用户不存在' })
-  async findOne(@Param('id') id: string, @Request() req): Promise<User> {
+  async findOne(
+    @Param('id') id: string,
+    @Request() req,
+  ): Promise<UserResponseDto> {
     // 这取决于JwtAuthGuard的实现，通常会将解析出的用户信息附加到req.user上。
     const currentUserId = req.user.userId; // 假设JWT Payload中有userId
     const currentUserRole = req.user.permission; // 假设JWT Payload中有role
 
     // 如果当前用户不是管理员且请求的ID不是当前用户的ID，则禁止访问
-    if (currentUserRole !== 'admin' && currentUserId !== id) {
+    if (currentUserRole !== Permission.ADMIN && currentUserId !== id) {
       throw new ForbiddenException('您没有权限访问其他用户的信息');
     }
 
-    // 调用UserService根据ID查找用户
-    const user = (await this.userService.findById(id)) as UserDocument | null;
+    try {
+      // 调用UserService根据ID查找用户
+      const user = await this.userService.findById(id);
 
-    // 如果用户不存在，抛出404异常
-    if (!user) {
-      throw new NotFoundException(`找不到ID为 ${id} 的用户`);
+      // 如果用户不存在，抛出404异常
+      if (!user) {
+        throw new NotFoundException(`找不到ID为 ${id} 的用户`);
+      }
+
+      // 使用UserResponseDto处理响应
+      return UserResponseDto.fromUser(user);
+    } catch (error) {
+      // 统一异常处理
+      this.handleException(error);
     }
-
-    // 可以创建一个UserResponseDto或者在Service中处理
-    const userResponse = (user as UserDocument).toObject(); // 转换为Plain Object方便删除属性
-    delete (userResponse as any).password; // 删除密码字段
-
-    return userResponse;
   }
 
   /**
@@ -71,56 +88,67 @@ export class UserController {
    * 此接口需要JWT认证。
    * @param req - 请求对象，用于获取当前用户信息
    * @param updateUserDto - 更新用户的数据传输对象
-   * @returns Promise<User> - 更新后的用户对象 (已过滤敏感信息)
+   * @returns Promise<UserResponseDto> - 更新后的用户对象 (已过滤敏感信息)
    */
   @Patch('update')
   @ApiOperation({ summary: '更新当前登录用户信息' })
   @ApiBody({ type: UpdateUserDto })
-  @ApiResponse({ status: 200, description: '更新成功，返回用户信息' })
+  @ApiResponse({
+    status: 200,
+    description: '更新成功，返回用户信息',
+    type: UserResponseDto,
+  })
   @ApiResponse({ status: 404, description: '用户不存在或更新失败' })
   async updateProfile(
     @Request() req,
     @Body() updateUserDto: UpdateUserDto,
-  ): Promise<User> {
+  ): Promise<UserResponseDto> {
     const currentUserId = req.user.userId;
     const currentUserRole = req.user.permission; // 获取当前用户的权限
 
-    // 调用UserService的updateUser方法更新用户
-    const updatedUser = await this.userService.updateUser(
-      currentUserId,
-      updateUserDto,
-      currentUserRole, // 传递当前用户的权限
-    );
+    try {
+      // 调用UserService的updateUser方法更新用户
+      const updatedUser = await this.userService.updateUser(
+        currentUserId,
+        updateUserDto,
+        currentUserRole, // 传递当前用户的权限
+      );
 
-    // 如果更新后的用户不存在，抛出404异常 (尽管Service方法应该处理此情况，此处留作安全检查)
-    if (!updatedUser) {
-      throw new NotFoundException('找不到当前用户或更新失败');
+      // 如果更新后的用户不存在，抛出404异常
+      if (!updatedUser) {
+        throw new NotFoundException('找不到当前用户或更新失败');
+      }
+
+      // 使用UserResponseDto处理响应
+      return UserResponseDto.fromUser(updatedUser);
+    } catch (error) {
+      // 统一异常处理
+      this.handleException(error);
     }
-
-    // 过滤掉敏感信息，如密码等
-    const userResponse = (updatedUser as UserDocument).toObject(); // 断言为 UserDocument 以调用 toObject()
-    delete (userResponse as any).password;
-
-    return userResponse;
   }
 
   /**
    * 获取所有用户列表（仅限管理员）
-   * @returns Promise<User[]> - 用户列表（去除密码）
+   * @returns Promise<UserResponseDto[]> - 用户列表（去除密码）
    */
   @Get('/list')
-  @Roles('admin')
+  @Roles(Permission.ADMIN)
   @ApiOperation({ summary: '获取所有用户列表（仅限管理员）' })
-  @ApiResponse({ status: 200, description: '获取成功，返回用户列表' })
-  async findAll(): Promise<User[]> {
-    const users = this.userService.findAll();
+  @ApiResponse({
+    status: 200,
+    description: '获取成功，返回用户列表',
+    type: [UserResponseDto],
+  })
+  async findAll(): Promise<UserResponseDto[]> {
+    try {
+      const users = await this.userService.findAll();
 
-    // 过滤掉敏感信息
-    return (await users).map((user) => {
-      const userResponse = (user as UserDocument).toObject();
-      delete (userResponse as any).password;
-      return userResponse as User; // 返回过滤后的User类型
-    });
+      // 使用UserResponseDto处理响应
+      return users.map((user) => UserResponseDto.fromUser(user));
+    } catch (error) {
+      // 统一异常处理
+      this.handleException(error);
+    }
   }
 
   /**
@@ -130,7 +158,7 @@ export class UserController {
    * @returns Promise<{ message: string }> - 删除成功消息
    */
   @Delete(':id')
-  @Roles('admin') // 只有admin角色可以访问此路由
+  @Roles(Permission.ADMIN) // 只有admin角色可以访问此路由
   @ApiOperation({ summary: '删除用户（仅限管理员）' })
   @ApiResponse({ status: 200, description: '删除成功' })
   @ApiResponse({ status: 403, description: '无权限删除' })
@@ -154,12 +182,8 @@ export class UserController {
 
       return { message: `用户ID ${id} 删除成功` };
     } catch (error) {
-      // 捕获Service中抛出的权限不足错误
-      if (error.message === USER_ERROR.FORBIDDEN) {
-        throw new ForbiddenException(USER_ERROR.FORBIDDEN);
-      }
-      // 捕获其他潜在错误
-      throw new InternalServerErrorException(USER_ERROR.INTERNAL);
+      // 统一异常处理
+      this.handleException(error);
     }
   }
 
@@ -167,22 +191,112 @@ export class UserController {
    * 用户注册（创建新用户）
    * 开放接口，无需登录
    * @param createUserDto - 创建用户的数据传输对象
-   * @returns Promise<User> - 创建成功的用户信息（去除密码）
+   * @returns Promise<UserResponseDto> - 创建成功的用户信息（去除密码）
    */
   @Post('register')
   @Public()
   @ApiOperation({ summary: '用户注册' })
   @ApiBody({ type: CreateUserDto })
-  @ApiResponse({ status: 201, description: '注册成功，返回用户信息' })
+  @ApiResponse({
+    status: 201,
+    description: '注册成功，返回用户信息',
+    type: UserResponseDto,
+  })
   @ApiResponse({ status: 400, description: '参数校验失败' })
   @ApiResponse({ status: 500, description: '服务器错误' })
   @UseGuards() // 取消全局守卫，允许未登录用户注册
-  async register(@Body() createUserDto: CreateUserDto): Promise<User> {
-    const user = await this.userService.create(createUserDto);
-    const userResponse = (user as any).toObject
-      ? (user as any).toObject()
-      : user;
-    delete userResponse.password;
-    return userResponse;
+  async register(
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<UserResponseDto> {
+    try {
+      const user = await this.userService.create(createUserDto);
+      return UserResponseDto.fromUser(user);
+    } catch (error) {
+      // 统一异常处理
+      this.handleException(error);
+    }
+  }
+
+  /**
+   * 获取用户功能模块
+   * @param userId 用户ID
+   * @returns 用户功能模块列表
+   */
+  @Get(':id/modules')
+  @ApiOperation({ summary: '获取用户功能模块列表' })
+  @ApiResponse({ status: 200, description: '获取成功，返回功能模块列表' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
+  async getUserModules(@Param('id') id: string): Promise<Module[]> {
+    try {
+      return await this.userService.getUserModules(id);
+    } catch (error) {
+      // 统一异常处理
+      this.handleException(error);
+    }
+  }
+
+  /**
+   * 设置用户功能模块（仅限管理员）
+   * @param id 用户ID
+   * @param updateModulesDto 功能模块列表
+   * @param req 请求对象
+   * @returns 更新后的用户信息
+   */
+  @Patch(':id/modules')
+  @Roles(Permission.ADMIN) // 只有admin角色可以访问此路由
+  @ApiOperation({ summary: '设置用户功能模块（仅限管理员）' })
+  @ApiBody({ type: UpdateUserModulesDto })
+  @ApiResponse({
+    status: 200,
+    description: '设置成功，返回用户信息',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 403, description: '权限不足' })
+  @ApiResponse({ status: 404, description: '用户不存在' })
+  async setUserModules(
+    @Param('id') id: string,
+    @Body() updateModulesDto: UpdateUserModulesDto,
+    @Request() req,
+  ): Promise<UserResponseDto> {
+    const currentUserRole = req.user.permission; // 获取当前用户的权限
+
+    try {
+      const updatedUser = await this.userService.setUserModules(
+        id,
+        updateModulesDto.modules,
+        currentUserRole,
+      );
+
+      if (!updatedUser) {
+        throw new NotFoundException(`找不到ID为 ${id} 的用户`);
+      }
+
+      // 使用UserResponseDto处理响应
+      return UserResponseDto.fromUser(updatedUser);
+    } catch (error) {
+      // 统一异常处理
+      this.handleException(error);
+    }
+  }
+
+  /**
+   * 统一异常处理方法
+   * @param error 捕获的异常
+   */
+  private handleException(error: any): never {
+    // 根据错误类型抛出对应的HTTP异常
+    if (error instanceof NotFoundException) {
+      throw error;
+    } else if (error instanceof ForbiddenException) {
+      throw error;
+    } else if (error instanceof HttpException) {
+      throw error;
+    } else {
+      // 其他未知错误，记录日志并抛出服务器错误
+      console.error('用户服务异常:', error);
+      throw new InternalServerErrorException(
+        USER_ERROR.INTERNAL || '服务器内部错误',
+      );
+    }
   }
 }

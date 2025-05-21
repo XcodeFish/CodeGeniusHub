@@ -116,17 +116,19 @@ export class ResetPasswordDto {
   @IsEmail({}, { message: '邮箱格式不正确' })
   email: string;
 
-  @ApiProperty({ description: '收到的6位验证码', example: 'AbCd12' })
-  @IsNotEmpty({ message: '验证码不能为空' })
-  @IsString({ message: '验证码必须是字符串' })
-  @Length(6, 6, { message: '验证码长度必须为6位' })
-  verifyCode: string;
+  @ApiProperty({
+    description: '密码重置令牌',
+    example: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+  })
+  @IsNotEmpty({ message: '重置令牌不能为空' })
+  @IsString({ message: '重置令牌必须是字符串' })
+  token: string;
 
   @ApiProperty({ description: '新密码', example: 'newpassword456' })
   @IsNotEmpty({ message: '新密码不能为空' })
   @IsString({ message: '新密码必须是字符串' })
   @Length(6, 12, { message: '新密码长度必须在6到12位之间' })
-  password: string;
+  newPassword: string;
 }
 
 // 通用成功响应

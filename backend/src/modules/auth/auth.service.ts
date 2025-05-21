@@ -8,8 +8,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, HydratedDocument } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
-import { User, UserDocument } from '@/modules/user/schemas/user.schema';
-import { Captcha, CaptchaDocument } from '@/shared/schemas/captcha.schema';
+import { User, UserDocument } from '../user/schemas/user.schema';
+import { Captcha, CaptchaDocument } from '../../shared/schemas/captcha.schema';
 import {
   RegisterDto,
   LoginDto,
@@ -20,11 +20,12 @@ import {
   RegisterResponseDto,
 } from './dto/auth.dto';
 import { UserDto } from '../user/dto/user.dto';
-import { jwtConstants } from '@/modules/common/constants/constants';
+import { jwtConstants } from '../../common/constants/constants';
 import * as uuid from 'uuid';
 import * as bcrypt from 'bcryptjs'; // 引入 bcrypt
 import { Response } from 'express'; // 引入 Response 类型 (用于设置 cookie)
 import * as svgCaptcha from 'svg-captcha';
+import { Logger } from '@nestjs/common';
 
 // 定义一个接口来扩展 UserDocument，包含时间戳字段
 interface UserDocumentWithTimestamps extends UserDocument {
@@ -52,6 +53,7 @@ class MockEmailService {
 export class AuthService {
   private readonly emailService = new MockEmailService(); //实例化模拟邮件服务
   private readonly bcryptSaltRounds = 10; // 定义 bcrypt 的 salt rounds
+  private readonly logger = new Logger(AuthService.name);
 
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
@@ -290,67 +292,80 @@ export class AuthService {
     });
   }
 
-  //  忘记密码
+  // 忘记密码
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<void> {
+    const { email } = forgotPasswordDto;
+
+    // 查找用户
+    const user = await this.userModel.findOne({ email }).exec();
+
+    // 即使用户不存在也返回成功
+    // 这样可以防止用户枚举攻击，攻击者无法知道邮箱是否存在
+    if (!user) {
+      this.logger.log(`尝试为不存在的邮箱 ${email} 重置密码`);
+      return;
+    }
+
+    // 生成一次性、有时效的重置令牌
+    const resetToken = uuid.v4();
+    const resetTokenExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30分钟过期
+
+    // 存储哈希后的令牌和过期时间
+    user.passwordResetToken = await bcrypt.hash(
+      resetToken,
+      this.bcryptSaltRounds,
+    );
+    user.passwordResetExpires = resetTokenExpiry;
+    await user.save();
+
+    // 构建重置链接
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+    // 发送邮件
+    await this.emailService.sendForgotPasswordEmail(email, resetLink);
+
+    this.logger.log(`为用户 ${email} 发送了密码重置邮件`);
+  }
+
+  // 重置密码
+  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {
+    const { email, token, newPassword } = resetPasswordDto;
+
+    // 查找用户
     const user = await this.userModel
       .findOne({
-        email: forgotPasswordDto.email,
+        email,
+        passwordResetExpires: { $gt: new Date() }, // 确保令牌未过期
       })
       .exec();
 
     if (!user) {
-      throw new NotFoundException('邮箱未注册');
+      throw new NotFoundException('重置链接无效或已过期');
     }
 
-    // 生成 6位 随机验证码
-    const verifyCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3分钟有效期
+    // 验证重置令牌
+    if (!user.passwordResetToken) {
+      throw new UnauthorizedException('重置令牌不存在');
+    }
 
-    // 将验证码和过期时间存入用户文档
-    user.forgotPasswordCode = verifyCode;
-    user.forgotPasswordCodeExpires = expiresAt;
+    const isTokenValid = await bcrypt.compare(token, user.passwordResetToken);
+    if (!isTokenValid) {
+      throw new UnauthorizedException('重置令牌无效');
+    }
+
+    // 更新密码
+    user.password = newPassword;
+
+    // 清除重置令牌
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    // 吊销所有刷新令牌
+    user.currentRefreshTokenHash = undefined;
+
     await user.save();
 
-    // TODO:通过邮件服务发送验证码 (实际需要实现邮件发送逻辑)
-    // await this.emailService.sendForgotPasswordEmail(user.email, verifyCode);
-
-    console.log(`忘记密码验证码 for ${user.email}: ${verifyCode}`); // 临时打印验证码方便测试
-  }
-
-  //  重置密码
-  async restPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {
-    const user = (await this.userModel
-      .findOne({
-        email: resetPasswordDto.email,
-      })
-      .exec()) as UserDocumentWithTimestamps;
-
-    if (!user) {
-      throw new NotFoundException('用户不存在');
-    }
-
-    // 校验验证码和过期时间
-    if (
-      !user.forgotPasswordCode ||
-      user.forgotPasswordCodeExpires === undefined ||
-      user.forgotPasswordCodeExpires < new Date() ||
-      user.forgotPasswordCode !== resetPasswordDto.verifyCode.toUpperCase()
-    ) {
-      // 清除错误的或过期的验证码信息（可选，为了安全）
-      user.forgotPasswordCode = undefined;
-      user.forgotPasswordCodeExpires = undefined;
-      await user.save();
-      throw new BadRequestException('验证码错误或已失效');
-    }
-
-    //  更新密码（pre-hook 会自动加密）
-    user.password = resetPasswordDto.password;
-
-    //  清除验证码信息
-    user.forgotPasswordCode = undefined;
-    user.forgotPasswordCodeExpires = undefined;
-
-    await user.save();
+    this.logger.log(`用户 ${email} 成功重置了密码`);
   }
 
   // 刷新 Access Token

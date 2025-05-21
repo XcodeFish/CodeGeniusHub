@@ -19,12 +19,14 @@ import {
 import { Permission } from '@/modules/user/schemas/user.schema';
 import { User, UserDocument } from '@/modules/user/schemas/user.schema';
 import { PROJECT_ERROR } from './dto/project.dto';
+import { PermissionService } from '../../common/services/permission.service';
 
 @Injectable()
 export class ProjectService {
   constructor(
     @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly permissionService: PermissionService,
   ) {}
 
   /**
@@ -74,12 +76,23 @@ export class ProjectService {
    */
   async getProjectById(projectId: string, userId: string) {
     try {
-      // 检查项目是否存在并且用户是否有权限访问
-      const project = await this.projectModel
-        .findById({
+      // 先检查当前用户是否是系统管理员
+      const isSystemAdmin = await this.permissionService.isSystemAdmin(userId);
+
+      // 如果是系统管理员，则不需要检查项目成员
+      let projectQuery = {};
+      if (isSystemAdmin) {
+        projectQuery = { _id: projectId };
+      } else {
+        projectQuery = {
           _id: projectId,
           $or: [{ createdBy: userId }, { 'members.userId': userId }],
-        })
+        };
+      }
+
+      // 检查项目是否存在并且用户是否有权限访问
+      const project = await this.projectModel
+        .findOne(projectQuery)
         .populate('createdBy', 'username email avatar')
         .populate('members.userId', 'username email avatar');
 
@@ -369,8 +382,8 @@ export class ProjectService {
         throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
       }
 
-      // 检查当前用户是否为管理员
-      if (!this.isProjectAdmin(project, userId)) {
+      // 使用权限服务检查当前用户是否可以管理项目
+      if (!(await this.permissionService.canManageProject(userId, projectId))) {
         throw new ForbiddenException(PROJECT_ERROR.NO_PERMISSION);
       }
 
@@ -387,18 +400,21 @@ export class ProjectService {
         throw new BadRequestException(PROJECT_ERROR.OWNER_ROLE_CANNOT_CHANGE);
       }
 
+      // 获取旧权限用于记录变更
+      const oldPermission = project.members[memberIndex].permission;
+
       // 更新成员权限
       project.members[memberIndex].permission = updateDto.permission;
 
       // 保存项目更新
       await project.save();
 
-      // 更新用户的项目权限列表
-      await this.updateUserProjectPermissions(
+      // 使用权限服务更新用户的项目权限并记录变更
+      await this.permissionService.updateProjectPermission(
         memberId,
         projectId,
-        project.name,
         updateDto.permission,
+        userId,
       );
 
       // 返回更新后的项目
@@ -485,14 +501,8 @@ export class ProjectService {
    * @returns 是否为管理员
    */
   private isProjectAdmin(project: ProjectDocument, userId: string): boolean {
-    // 如果是创建者，则一定是管理员
-    if (project.createdBy.toString() === userId) {
-      return true;
-    }
-
-    // 查找成员并检查角色
-    const member = project.members.find((m) => m.userId.toString() === userId);
-    return member?.permission === Permission.ADMIN;
+    // 委托给权限服务
+    return this.getUserRoleInProject(project, userId) === Permission.ADMIN;
   }
 
   /**
@@ -540,15 +550,8 @@ export class ProjectService {
    * @returns 是否有权限访问
    */
   async hasProjectAccess(projectId: string, userId: string): Promise<boolean> {
-    try {
-      const count = await this.projectModel.countDocuments({
-        _id: projectId,
-        $or: [{ createdBy: userId }, { 'members.userId': userId }],
-      });
-      return count > 0;
-    } catch (error) {
-      return false;
-    }
+    // 委托给权限服务处理
+    return this.permissionService.canAccessProject(userId, projectId);
   }
 
   /**
@@ -610,6 +613,10 @@ export class ProjectService {
       }
 
       await user.save();
+
+      // 清除该用户的项目权限缓存
+      await this.permissionService.clearUserPermissionCache(userId, projectId);
+
       return true;
     } catch (error) {
       console.error('更新用户项目权限失败:', error);
@@ -637,6 +644,10 @@ export class ProjectService {
       );
 
       await user.save();
+
+      // 清除该用户的项目权限缓存
+      await this.permissionService.clearUserPermissionCache(userId, projectId);
+
       return true;
     } catch (error) {
       console.error('移除用户项目权限失败:', error);

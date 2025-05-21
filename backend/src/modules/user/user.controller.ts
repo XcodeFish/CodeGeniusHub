@@ -13,11 +13,14 @@ import {
   Post,
   HttpStatus,
   HttpException,
+  Put,
+  Query,
+  HttpCode,
 } from '@nestjs/common';
 import { UserService } from './user.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard'; // 假设存在用于HTTP的JwtAuthGuard
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'; // 假设存在用于HTTP的JwtAuthGuard
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { Public } from '@/common/decorators/public.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator'; // 引入Roles装饰器
 import {
   UpdateUserDto,
@@ -29,12 +32,22 @@ import { User, UserDocument, Module } from './schemas/user.schema'; // 引入Use
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger'; // 引入swagger装饰器
 import { USER_ERROR } from '../../common/constants/error-codes';
 import { Permission } from '../user/schemas/user.schema'; // 修正导入路径
+import { PermissionService } from '../../common/services/permission.service';
+
+// 批量更新项目权限DTO
+class BatchUpdatePermissionsDto {
+  projectId: string;
+  userPermissions: { userId: string; permission: Permission }[];
+}
 
 @Controller('user') // 定义基础路由 /user
 @ApiTags('用户模块')
 @UseGuards(JwtAuthGuard, RolesGuard) // 同时应用 JwtAuthGuard 和 RolesGuard
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly permissionService: PermissionService,
+  ) {}
 
   /**
    * 根据用户ID获取用户信息
@@ -277,6 +290,163 @@ export class UserController {
       // 统一异常处理
       this.handleException(error);
     }
+  }
+
+  /**
+   * 批量更新项目权限
+   * @param req 请求对象
+   * @param body 批量权限请求数据
+   * @returns 批量更新结果
+   */
+  @Post('batch-project-permissions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Permission.ADMIN) // 系统管理员或项目管理员可操作
+  @ApiOperation({ summary: '批量更新项目权限' })
+  @ApiBody({ type: BatchUpdatePermissionsDto })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '批量更新成功',
+    schema: {
+      type: 'object',
+      properties: {
+        code: { type: 'number', example: 0 },
+        message: { type: 'string', example: '批量权限更新完成' },
+        results: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              userId: { type: 'string' },
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '权限不足' })
+  @HttpCode(HttpStatus.OK)
+  async batchUpdateProjectPermissions(
+    @Request() req,
+    @Body() body: BatchUpdatePermissionsDto,
+  ) {
+    const currentUserId = req.user.userId;
+    const { projectId, userPermissions } = body;
+
+    const results = await this.permissionService.batchUpdateProjectPermissions(
+      projectId,
+      userPermissions,
+      currentUserId,
+    );
+
+    return {
+      code: 0,
+      message: '批量权限更新完成',
+      results,
+    };
+  }
+
+  /**
+   * 更新用户系统权限
+   * @param req 请求对象
+   * @param userId 目标用户ID
+   * @param permission 权限级别
+   * @returns 更新结果
+   */
+  @Put(':userId/system-permission')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Permission.ADMIN) // 只有系统管理员可以修改系统权限
+  @ApiOperation({ summary: '更新用户系统权限' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '更新成功',
+    schema: {
+      type: 'object',
+      properties: {
+        code: { type: 'number', example: 0 },
+        message: { type: 'string', example: '权限更新成功' },
+        success: { type: 'boolean', example: true },
+      },
+    },
+  })
+  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '权限不足' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: '用户不存在' })
+  @HttpCode(HttpStatus.OK)
+  async updateSystemPermission(
+    @Request() req,
+    @Param('userId') userId: string,
+    @Body('permission') permission: Permission,
+  ) {
+    const currentUserId = req.user.userId;
+
+    await this.permissionService.updateSystemPermission(
+      userId,
+      permission,
+      currentUserId,
+    );
+
+    return {
+      code: 0,
+      message: '系统权限更新成功',
+      success: true,
+    };
+  }
+
+  /**
+   * 获取权限变更日志
+   * @param req 请求对象
+   * @param userId 用户ID
+   * @returns 权限变更日志列表
+   */
+  @Get(':userId/permission-logs')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Permission.ADMIN) // 只有系统管理员可以查看权限日志
+  @ApiOperation({ summary: '获取用户权限变更日志' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '获取成功',
+    schema: {
+      type: 'object',
+      properties: {
+        code: { type: 'number', example: 0 },
+        message: { type: 'string', example: '获取成功' },
+        logs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              adminId: { type: 'string' },
+              adminName: { type: 'string' },
+              oldPermission: { type: 'string' },
+              newPermission: { type: 'string' },
+              permissionType: { type: 'string' },
+              projectId: { type: 'string' },
+              projectName: { type: 'string' },
+              timestamp: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: '权限不足' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: '用户不存在' })
+  async getPermissionLogs(
+    @Param('userId') userId: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+    @Query('type') type?: 'system' | 'project',
+    @Query('projectId') projectId?: string,
+  ) {
+    // 权限日志查询的实现将依赖于PermissionService中的方法
+    // 这里仅展示API设计，具体实现将在PermissionService中完成
+
+    return {
+      code: 0,
+      message: '获取成功',
+      logs: [],
+    };
   }
 
   /**

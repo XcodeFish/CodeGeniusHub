@@ -32,7 +32,7 @@ export interface Module {
 export class User {
   // 用户ID由MongoDB自动生成_id，这里不再显式定义uuid
 
-  @Prop({ required: true, unique: true, index: true }) // 邮箱作为唯一索引
+  @Prop({ required: true, unique: true }) // 邮箱作为唯一索引
   email: string;
 
   @Prop({ required: true })
@@ -62,12 +62,19 @@ export class User {
   @Prop({ required: false, default: true }) // 标记用户是否首次登录，用于新手引导
   firstLogin?: boolean;
 
-  // 忘记密码验证码
+  // 忘记密码验证码 (旧方式)
   @Prop()
   forgotPasswordCode?: string;
 
   @Prop()
   forgotPasswordCodeExpires?: Date;
+
+  // 密码重置令牌 (更安全的方式)
+  @Prop()
+  passwordResetToken?: string;
+
+  @Prop()
+  passwordResetExpires?: Date;
 
   // 用于管理 Refresh Token 的字段
   // 简单的示例：存储 refresh token 的 hash 或一个关联 ID
@@ -89,10 +96,8 @@ UserSchema.pre('save', async function (next) {
 });
 
 // 添加各种索引以优化查询
-UserSchema.index({ email: 1 });
-UserSchema.index({ username: 1 }, { unique: true, sparse: true });
-UserSchema.index({ phone: 1 }, { unique: true, sparse: true });
 UserSchema.index({ forgotPasswordCode: 1 }, { unique: true, sparse: true });
-UserSchema.index({ permission: 1 }); // 添加对权限的索引，加速按权限查询
-UserSchema.index({ 'projectPermissions.projectId': 1 }); // 添加对项目权限的索引
-UserSchema.index({ 'modules.moduleId': 1 }); // 添加对功能模块的索引
+UserSchema.index({ passwordResetToken: 1 }, { unique: true, sparse: true });
+UserSchema.index({ permission: 1 });
+UserSchema.index({ 'projectPermissions.projectId': 1 });
+UserSchema.index({ 'modules.moduleId': 1 });

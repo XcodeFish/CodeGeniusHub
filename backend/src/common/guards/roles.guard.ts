@@ -2,17 +2,19 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
-  Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator'; // 引入装饰器中定义的KEY
+import { PermissionService } from '../services/permission.service';
 import { Permission } from '../../modules/user/schemas/user.schema'; // 引入权限枚举
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  private readonly logger = new Logger(RolesGuard.name);
-
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private permissionService: PermissionService,
+  ) {}
 
   // 用户权限字段名常量
   private readonly USER_PERMISSION_FIELD = 'permission';
@@ -29,50 +31,77 @@ export class RolesGuard implements CanActivate {
    * @param context 执行上下文
    * @returns 是否允许访问
    */
-  canActivate(context: ExecutionContext): boolean {
-    // 获取路由上设置的roles
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const requiredRoles = this.reflector.getAllAndOverride<Permission[]>(
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
 
-    // 如果路由没有设置roles，则表示不需要特定权限，允许访问
+    // 如果没有设置角色要求，默认放行
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
-    const user = request.user;
+    const { user, params } = context.switchToHttp().getRequest();
 
-    // 如果没有用户信息，拒绝访问
-    if (!user || !user[this.USER_PERMISSION_FIELD]) {
-      this.logger.warn(`无效的用户权限: ${user?.userId}`);
-      return false;
+    // 如果请求中没有用户信息，表示未认证
+    if (!user || !user.id) {
+      throw new ForbiddenException('未授权访问');
     }
 
-    const userPermission = user[this.USER_PERMISSION_FIELD];
-
-    // 记录权限检查日志
-    this.logger.debug(
-      `权限检查: 用户[${user.userId}]-[${userPermission}], 要求角色[${requiredRoles.join(',')}]`,
-    );
-
-    // 1. Admin 权限可以访问任何需要权限的路由
-    if (userPermission === Permission.ADMIN) {
+    // 检查是否系统管理员，系统管理员可以访问任何资源
+    if (await this.permissionService.isSystemAdmin(user.id)) {
       return true;
     }
 
-    // 2. 检查用户权限是否满足要求
-    const hasPermission = this.checkPermission(userPermission, requiredRoles);
+    // 获取项目ID（如果有）
+    const projectId = params.projectId || params.id;
 
-    // 记录访问拒绝日志
-    if (!hasPermission) {
-      this.logger.warn(
-        `权限不足: 用户[${user.userId}]-[${userPermission}], 要求角色[${requiredRoles.join(',')}]`,
+    // 如果有项目ID，检查项目权限
+    if (projectId) {
+      const permission = await this.permissionService.getUserProjectPermission(
+        user.id,
+        projectId,
       );
+
+      // 检查是否包含所需权限
+      return requiredRoles.some((role) => {
+        if (role === Permission.VIEWER) {
+          // 任何权限都可以查看
+          return !!permission;
+        } else if (role === Permission.EDITOR) {
+          // 编辑者或管理员可以编辑
+          return (
+            permission === Permission.EDITOR || permission === Permission.ADMIN
+          );
+        } else if (role === Permission.ADMIN) {
+          // 只有管理员可以管理
+          return permission === Permission.ADMIN;
+        }
+        return false;
+      });
     }
 
-    return hasPermission;
+    // 如果没有项目ID，只检查系统权限
+    const systemPermission =
+      await this.permissionService.getUserSystemPermission(user.id);
+
+    return requiredRoles.some((role) => {
+      if (role === Permission.VIEWER) {
+        // 任何系统角色都可以查看
+        return !!systemPermission;
+      } else if (role === Permission.EDITOR) {
+        // 编辑者或管理员可以编辑
+        return (
+          systemPermission === Permission.EDITOR ||
+          systemPermission === Permission.ADMIN
+        );
+      } else if (role === Permission.ADMIN) {
+        // 只有管理员可以管理
+        return systemPermission === Permission.ADMIN;
+      }
+      return false;
+    });
   }
 
   /**

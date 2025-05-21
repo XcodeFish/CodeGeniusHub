@@ -5,10 +5,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { User, UserSchema } from '@/modules/user/schemas/user.schema';
-import { Captcha, CaptchaSchema } from '@/shared/schemas/captcha.schema';
-import { JwtStrategy } from '@/modules/common/strategies/jwt.strategy';
-import { jwtConstants } from '@/modules/common/constants/constants';
+import { User, UserSchema } from '../user/schemas/user.schema';
+import { Captcha, CaptchaSchema } from '../../shared/schemas/captcha.schema';
+import { JwtStrategy } from '../../common/strategies/jwt.strategy';
+import { jwtConstants } from '../../common/constants/constants';
+import { CommonModule } from '../../common/common.module';
 // import { MailModule } from '../mail/mail.module'; // 如果有真实的邮件模块
 
 @Module({
@@ -22,6 +23,7 @@ import { jwtConstants } from '@/modules/common/constants/constants';
       secret: jwtConstants.secret,
       signOptions: { expiresIn: jwtConstants.accessTokenExpiresIn },
     }),
+    CommonModule, // 导入CommonModule
     // MailModule, // 如果有真实的邮件模块，在这里导入
   ],
   controllers: [AuthController],

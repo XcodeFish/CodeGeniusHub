@@ -11,6 +11,7 @@ backend/
 ├── src/
 │   ├── app.module.ts
 │   ├── main.ts
+│   └── common/         # 公共工具/装饰器
 │   ├── modules/
 │   │   ├── auth/           # 鉴权与用户
 │   │   ├── user/           # 用户信息
@@ -18,7 +19,6 @@ backend/
 │   │   ├── file/           # 文件与版本
 │   │   ├── ai/             # AI能力
 │   │   ├── collaboration/  # 协作与Socket
-│   │   └── common/         # 公共工具/装饰器
 │   ├── config/             # 配置（如env、数据库）
 │   └── shared/             # DTO、常量、拦截器等
 ├── test/

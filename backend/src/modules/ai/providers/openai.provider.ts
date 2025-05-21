@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, TimeoutError, throwError, timer } from 'rxjs';
+import { timeout, catchError, retryWhen, mergeMap } from 'rxjs/operators';
 import { AxiosError } from 'axios';
 import { LlmProvider } from '../interfaces/llm-provider.interface';
 import {
@@ -17,6 +18,9 @@ import { CodeParser } from '../utils/code-parser';
 export class OpenAIProvider implements LlmProvider {
   private readonly logger = new Logger(OpenAIProvider.name);
   private defaultModel = 'gpt-3.5-turbo';
+  private readonly requestTimeout = 30000; // 30秒超时
+  private readonly maxRetries = 3; // 最大重试次数
+  private readonly initialRetryDelay = 1000; // 初始重试延迟(毫秒)
 
   constructor(
     private readonly httpService: HttpService,
@@ -49,15 +53,66 @@ export class OpenAIProvider implements LlmProvider {
 
     try {
       const startTime = Date.now();
+
       const response = await firstValueFrom(
-        this.httpService.post<OpenAICompletionResponse>(url, data, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${key}`,
-          },
-        }),
+        this.httpService
+          .post<OpenAICompletionResponse>(url, data, {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${key}`,
+            },
+          })
+          .pipe(
+            // 添加超时处理
+            timeout(this.requestTimeout),
+            // 添加错误处理和重试逻辑
+            catchError((error) => {
+              if (error instanceof TimeoutError) {
+                this.logger.warn(`OpenAI API请求超时: ${url}`);
+                return throwError(() => new Error('请求超时，请稍后重试'));
+              }
+
+              // 处理可重试的错误
+              if (error.response?.status) {
+                const status = error.response.status;
+                // 429(超过速率限制)和5xx(服务器错误)可以重试
+                if (status === 429 || status >= 500) {
+                  return throwError(() => error);
+                }
+              }
+
+              // 其他错误直接抛出
+              return throwError(() => error);
+            }),
+            // 重试逻辑
+            retryWhen((errors) =>
+              errors.pipe(
+                mergeMap((error, i) => {
+                  const retryAttempt = i + 1;
+                  // 达到最大重试次数，不再重试
+                  if (retryAttempt > this.maxRetries) {
+                    return throwError(() => error);
+                  }
+
+                  // 指数退避策略
+                  const delay =
+                    this.initialRetryDelay * Math.pow(2, retryAttempt - 1);
+                  this.logger.warn(
+                    `OpenAI API请求失败，${retryAttempt}/${this.maxRetries}次重试，延迟${delay}ms`,
+                  );
+
+                  return timer(delay);
+                }),
+              ),
+            ),
+          ),
       );
+
       const latency = Date.now() - startTime;
+
+      this.logger.debug(
+        `OpenAI请求完成, 耗时: ${latency}ms, 端点: ${endpoint}`,
+      );
 
       return {
         success: true,
@@ -266,17 +321,20 @@ export class OpenAIProvider implements LlmProvider {
       const analysisResult = JSON.parse(jsonStr);
 
       // 将复杂的 issues 对象转换为字符串数组
-      const issues = (analysisResult.issues || []).map(
+      const issues: string[] = (analysisResult.issues || []).map(
         (issue: any) =>
           `[${issue.severity}] ${issue.message}${issue.fix ? ` - 建议: ${issue.fix}` : ''}`,
       );
+
+      // 确保 strengths 是字符串数组
+      const strengths: string[] = analysisResult.strengths || [];
 
       return {
         success: true,
         data: {
           score: Number(analysisResult.score),
           issues,
-          strengths: analysisResult.strengths || [],
+          strengths,
           summary: analysisResult.summary || '',
         },
         usage: result.usage,
@@ -385,7 +443,7 @@ export class OpenAIProvider implements LlmProvider {
         const optimizationResult = JSON.parse(jsonStr);
 
         // 将复杂的 changes 对象转换为字符串数组
-        const changes = (optimizationResult.changes || []).map(
+        const changes: string[] = (optimizationResult.changes || []).map(
           (change: any) => `${change.type}: ${change.description}`,
         );
 

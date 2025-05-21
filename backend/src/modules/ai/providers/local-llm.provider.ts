@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, TimeoutError, throwError, timer } from 'rxjs';
+import { timeout, catchError, retryWhen, mergeMap } from 'rxjs/operators';
+import { AxiosError } from 'axios';
 import { LlmProvider } from '../interfaces/llm-provider.interface';
 import { AiServiceResponse } from '../interfaces/openai-response.interface';
 import { TokenCounter } from '../utils/token-counter';
@@ -15,6 +17,9 @@ import { CodeParser } from '../utils/code-parser';
 export class LocalLlmProvider implements LlmProvider {
   private readonly logger = new Logger(LocalLlmProvider.name);
   private defaultModel = 'codellama';
+  private readonly requestTimeout = 60000; // 60秒超时 (本地模型可能需要更长的处理时间)
+  private readonly maxRetries = 2; // 最大重试次数
+  private readonly initialRetryDelay = 2000; // 初始重试延迟(毫秒)
 
   constructor(
     private readonly httpService: HttpService,
@@ -46,10 +51,51 @@ export class LocalLlmProvider implements LlmProvider {
 
     try {
       const startTime = Date.now();
+
       const response = await firstValueFrom(
-        this.httpService.post<any>(url, data, { headers }),
+        this.httpService.post<any>(url, data, { headers }).pipe(
+          // 添加超时处理
+          timeout(this.requestTimeout),
+          // 添加错误处理和重试逻辑
+          catchError((error) => {
+            if (error instanceof TimeoutError) {
+              this.logger.warn(`本地LLM API请求超时: ${url}`);
+              return throwError(
+                () => new Error('本地模型响应超时，可能是计算资源不足'),
+              );
+            }
+
+            // 本地模型可能会因资源问题临时不可用，大多数错误都可以重试
+            return throwError(() => error);
+          }),
+          // 重试逻辑
+          retryWhen((errors) =>
+            errors.pipe(
+              mergeMap((error, i) => {
+                const retryAttempt = i + 1;
+                // 达到最大重试次数，不再重试
+                if (retryAttempt > this.maxRetries) {
+                  return throwError(() => error);
+                }
+
+                // 线性退避策略，本地模型不需要指数退避
+                const delay = this.initialRetryDelay * retryAttempt;
+                this.logger.warn(
+                  `本地LLM API请求失败，${retryAttempt}/${this.maxRetries}次重试，延迟${delay}ms`,
+                );
+
+                return timer(delay);
+              }),
+            ),
+          ),
+        ),
       );
+
       const latency = Date.now() - startTime;
+
+      this.logger.debug(
+        `本地LLM请求完成, 耗时: ${latency}ms, 端点: ${endpoint}`,
+      );
 
       // 本地LLM可能不提供token计数
       const usage = response.data.usage
@@ -76,9 +122,11 @@ export class LocalLlmProvider implements LlmProvider {
         usage,
       };
     } catch (error) {
+      const axiosError = error as AxiosError<any>;
       const errorMessage =
-        error.response?.data?.error?.message || error.message;
-      const errorType = error.response?.data?.error?.type || 'unknown_error';
+        axiosError.response?.data?.error?.message || axiosError.message;
+      const errorType =
+        axiosError.response?.data?.error?.type || 'unknown_error';
 
       this.logger.error(`本地LLM API错误: ${errorMessage}`, error.stack);
 
@@ -310,7 +358,7 @@ export class LocalLlmProvider implements LlmProvider {
         data: {
           score,
           issues,
-          strengths: strengths.length > 0 ? strengths : [],
+          strengths,
           summary,
         },
         usage: result.usage,

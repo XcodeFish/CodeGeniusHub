@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CommonModule } from '../../common/common.module';
 import { AuthModule } from '../auth/auth.module';
 
@@ -30,6 +31,7 @@ import { CodeParser } from './utils/code-parser';
     AuthModule,
     HttpModule,
     ConfigModule,
+    EventEmitterModule.forRoot(),
     MongooseModule.forFeature([
       { name: AiConfig.name, schema: AiConfigSchema },
       { name: PromptTemplate.name, schema: PromptTemplateSchema },

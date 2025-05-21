@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, TimeoutError } from 'rxjs';
+import { timeout, catchError } from 'rxjs/operators';
+import { AxiosError } from 'axios';
 import { LlmProvider } from '../interfaces/llm-provider.interface';
 import { AiServiceResponse } from '../interfaces/openai-response.interface';
 import { TokenCounter } from '../utils/token-counter';
 import { CodeParser } from '../utils/code-parser';
+import { setTimeout, clearTimeout } from 'timers';
 
 interface ClaudeCompletionResponse {
   id: string;
@@ -34,6 +37,7 @@ interface ClaudeErrorResponse {
 export class ClaudeProvider implements LlmProvider {
   private readonly logger = new Logger(ClaudeProvider.name);
   private defaultModel = 'claude-3-haiku-20240307';
+  private readonly requestTimeout = 30000; // 30秒超时
 
   constructor(
     private readonly httpService: HttpService,
@@ -43,14 +47,14 @@ export class ClaudeProvider implements LlmProvider {
   ) {}
 
   /**
-   * 发送请求到Claude API
+   * 发送请求到Anthropic API
    */
   private async sendRequest<T>(
     data: any,
     apiKey?: string,
     baseUrl?: string,
   ): Promise<AiServiceResponse<T>> {
-    const url = `${baseUrl || 'https://api.anthropic.com/v1'}/messages`;
+    const url = `${baseUrl || 'https://api.anthropic.com'}/v1/messages`;
     const key = apiKey || this.configService.get<string>('CLAUDE_API_KEY');
 
     if (!key) {
@@ -65,36 +69,55 @@ export class ClaudeProvider implements LlmProvider {
 
     try {
       const startTime = Date.now();
+
+      // 添加超时处理
       const response = await firstValueFrom(
-        this.httpService.post<ClaudeCompletionResponse>(url, data, {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': key,
-            'anthropic-version': '2023-06-01',
-          },
-        }),
+        this.httpService
+          .post<T>(url, data, {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': key,
+              'anthropic-version': '2023-06-01',
+            },
+          })
+          .pipe(
+            timeout(this.requestTimeout),
+            catchError((error) => {
+              if (error instanceof TimeoutError) {
+                throw new Error('请求超时，请稍后重试');
+              }
+              throw error;
+            }),
+          ),
       );
+
       const latency = Date.now() - startTime;
+
+      this.logger.debug(`Claude请求完成, 耗时: ${latency}ms`);
 
       return {
         success: true,
         data: response.data as unknown as T,
-        usage: {
-          promptTokens: response.data.usage?.input_tokens || 0,
-          completionTokens: response.data.usage?.output_tokens || 0,
-          totalTokens:
-            (response.data.usage?.input_tokens || 0) +
-            (response.data.usage?.output_tokens || 0),
-        },
+        usage: (response.data as any)?.usage
+          ? {
+              promptTokens: (response.data as any).usage.input_tokens,
+              completionTokens: (response.data as any).usage.output_tokens,
+              totalTokens:
+                (response.data as any).usage.input_tokens +
+                (response.data as any).usage.output_tokens,
+            }
+          : undefined,
       };
     } catch (error) {
-      const errorResponse = error.response?.data as ClaudeErrorResponse;
+      const axiosError = error as AxiosError<ClaudeErrorResponse>;
       const errorMessage =
-        errorResponse?.error?.message ||
-        errorResponse?.message ||
-        error.message;
+        axiosError.response?.data?.error?.message ||
+        axiosError.response?.data?.message ||
+        axiosError.message;
       const errorType =
-        errorResponse?.type || errorResponse?.error?.type || 'unknown_error';
+        axiosError.response?.data?.error?.type ||
+        axiosError.response?.data?.type ||
+        'unknown_error';
 
       this.logger.error(`Claude API错误: ${errorMessage}`, error.stack);
 
@@ -134,21 +157,28 @@ export class ClaudeProvider implements LlmProvider {
     const maxTokens = options?.maxTokens || 2000;
     const temperature = options?.temperature || 0.3;
 
-    // 构建系统消息和用户消息
-    const systemContent = `你是一位专业的代码生成助手，擅长根据需求描述生成高质量、符合最佳实践的代码。
-请根据提供的需求和上下文，生成清晰、简洁、易于维护的代码。`;
+    // 构建系统消息
+    const systemContent = `你是一位${language}编程专家，擅长编写清晰、高效、符合最佳实践的代码。
+请根据用户的需求，编写完整、可运行的代码，并附上必要的解释。`;
 
-    let userContent = `需求描述: ${prompt}\n\n目标语言: ${language}`;
+    // 构建用户消息
+    let userContent = `需求: ${prompt}\n\n`;
+    userContent += `编程语言: ${language}\n\n`;
 
     if (options?.framework) {
-      userContent += `\n目标框架/库: ${options.framework}`;
+      userContent += `框架: ${options.framework}\n\n`;
     }
 
     if (options?.context) {
-      userContent += `\n\n当前文件内容:\n\`\`\`\n${options.context}\n\`\`\``;
+      userContent += `上下文代码:\n\`\`\`\n${options.context}\n\`\`\`\n\n`;
     }
 
-    userContent += '\n\n请生成满足上述需求的代码，并简要解释实现思路。';
+    userContent += `请编写一个满足上述需求的代码实现，并以JSON格式返回结果：
+{
+  "generatedCode": "完整的代码实现",
+  "explanation": "代码的详细解释",
+  "alternatives": ["可选的其他实现方式1", "可选的其他实现方式2"]
+}`;
 
     const result = await this.sendRequest<ClaudeCompletionResponse>(
       {
@@ -171,35 +201,59 @@ export class ClaudeProvider implements LlmProvider {
       return result as AiServiceResponse<any>;
     }
 
-    // Claude API返回的响应格式与OpenAI不同，需要提取content中的text
     const responseContent = result.data.content?.[0]?.text || '';
 
-    // 解析生成的代码和解释
-    const generatedCode = this.codeParser.extractGeneratedCode(responseContent);
-    const explanation = this.codeParser.extractExplanation(responseContent);
+    try {
+      const jsonMatch = responseContent.match(/```json\s*([\s\S]*?)\s*```/) ||
+        responseContent.match(/```\s*([\s\S]*?)\s*```/) || [
+          null,
+          responseContent,
+        ];
 
-    // 从响应中提取可能的替代方案建议
-    const alternatives: string[] = [];
-    const alternativesMatch = responseContent.match(
-      /(?:替代方案|其他实现|可选方案)[:：]([^]*?)(?=\n\n|$)/i,
-    );
+      if (jsonMatch && jsonMatch[1]) {
+        const jsonStr = jsonMatch[1].trim();
+        const codeResult = JSON.parse(jsonStr);
 
-    if (alternativesMatch && alternativesMatch[1]) {
-      const altText = alternativesMatch[1].trim();
-      // 提取numbered列表或破折号列表
-      const altItems = altText.split(/\n[*\-\d\.]+\s+/).filter(Boolean);
-      alternatives.push(...altItems);
+        // 确保alternatives是字符串数组
+        const alternatives: string[] = Array.isArray(codeResult.alternatives)
+          ? codeResult.alternatives
+          : [];
+
+        return {
+          success: true,
+          data: {
+            generatedCode: codeResult.generatedCode || '',
+            explanation: codeResult.explanation || '',
+            alternatives,
+          },
+          usage: result.usage,
+        };
+      } else {
+        // 如果无法解析JSON，尝试从响应中提取代码和解释
+        const generatedCode =
+          this.codeParser.extractGeneratedCode(responseContent);
+        const explanation = this.codeParser.extractExplanation(responseContent);
+
+        return {
+          success: true,
+          data: {
+            generatedCode,
+            explanation,
+            alternatives: [],
+          },
+          usage: result.usage,
+        };
+      }
+    } catch (error) {
+      this.logger.error('解析代码生成响应失败', error);
+      return {
+        success: false,
+        error: {
+          code: 'parse_error',
+          message: '解析代码生成响应失败',
+        },
+      };
     }
-
-    return {
-      success: true,
-      data: {
-        generatedCode,
-        explanation,
-        alternatives: alternatives.length > 0 ? alternatives : [],
-      },
-      usage: result.usage,
-    };
   }
 
   /**
@@ -226,27 +280,30 @@ export class ClaudeProvider implements LlmProvider {
     const model = options?.model || this.defaultModel;
     const analysisLevel = options?.analysisLevel || 'detailed';
 
-    // 构建系统消息和用户消息
-    const systemContent = `你是一位代码质量分析专家，擅长发现代码中的问题、优化机会和安全隐患。
-请对提供的代码进行全面分析，并给出具体的改进建议。`;
+    // 构建系统消息
+    const systemContent = `你是一位代码审查专家，擅长${language}编程，请对提供的代码进行全面分析和评价。
+根据代码的质量、可读性、效率、安全性和最佳实践，给出评分和详细的反馈。`;
 
-    let userContent = `分析深度: ${analysisLevel}\n\n编程语言: ${language}\n\n`;
+    // 构建用户消息
+    let userContent = `请对以下${language}代码进行${
+      analysisLevel === 'basic'
+        ? '基础'
+        : analysisLevel === 'comprehensive'
+          ? '全面深入'
+          : '详细'
+    }分析：\n\n`;
 
     if (options?.context) {
-      userContent += `上下文代码:\n\`\`\`\n${options.context}\n\`\`\`\n\n`;
+      userContent += `上下文信息：\n${options.context}\n\n`;
     }
 
-    userContent += `需要分析的代码:\n\`\`\`\n${code}\n\`\`\`\n\n`;
-    userContent += `请对上述代码进行${analysisLevel}级别的分析，以JSON格式返回结果，包括：
+    userContent += `\`\`\`${language}\n${code}\n\`\`\`\n\n`;
+
+    userContent += `请以JSON格式返回分析结果：
 {
-  "score": 数值(0-100),
+  "score": 分数(0-100),
   "issues": [
-    {
-      "severity": "error"|"warning"|"info",
-      "message": "问题描述",
-      "location": {"line": 行号, "column": 列号},
-      "fix": "修复建议"
-    }
+    {"severity": "error|warning|info", "message": "问题描述", "fix": "修复建议"}
   ],
   "strengths": ["优点1", "优点2", ...],
   "summary": "总体评价"
@@ -285,17 +342,20 @@ export class ClaudeProvider implements LlmProvider {
       const analysisResult = JSON.parse(jsonStr);
 
       // 将复杂的 issues 对象转换为字符串数组
-      const issues = (analysisResult.issues || []).map(
+      const issues: string[] = (analysisResult.issues || []).map(
         (issue: any) =>
           `[${issue.severity}] ${issue.message}${issue.fix ? ` - 建议: ${issue.fix}` : ''}`,
       );
+
+      // 确保 strengths 是字符串数组
+      const strengths: string[] = analysisResult.strengths || [];
 
       return {
         success: true,
         data: {
           score: Number(analysisResult.score),
           issues,
-          strengths: analysisResult.strengths || [],
+          strengths,
           summary: analysisResult.summary || '',
         },
         usage: result.usage,
@@ -403,7 +463,7 @@ export class ClaudeProvider implements LlmProvider {
         const optimizationResult = JSON.parse(jsonStr);
 
         // 将复杂的 changes 对象转换为字符串数组
-        const changes = (optimizationResult.changes || []).map(
+        const changes: string[] = (optimizationResult.changes || []).map(
           (change: any) => `${change.type}: ${change.description}`,
         );
 
@@ -482,31 +542,27 @@ export class ClaudeProvider implements LlmProvider {
     const model = options?.model || this.defaultModel;
 
     // 构建系统消息
-    let systemContent = `你是一位编程助手，可以回答与编程、开发相关的问题。请尽可能提供准确、有帮助的回答，并在适当时提供代码示例。`;
+    let systemContent = `你是一位编程助手，擅长回答编程相关的问题，提供代码示例和问题解决方案。`;
 
-    // 如果有代码上下文，添加到系统提示中
     if (options?.codeContext) {
-      systemContent += `\n\n当前代码上下文:\n\`\`\`\n${options.codeContext}\n\`\`\``;
+      systemContent += `\n\n以下是当前的代码上下文，你可以参考它来回答问题：\n\`\`\`\n${options.codeContext}\n\`\`\``;
     }
 
-    // 转换历史记录格式
-    const claudeMessages = history.map((msg) => ({
-      role: msg.role === 'assistant' ? 'assistant' : 'user',
-      content: msg.content,
-    }));
-
-    // 添加当前用户消息
-    claudeMessages.push({
-      role: 'user',
-      content: message,
-    });
+    // 构建消息历史
+    const messages = [
+      ...history.map((h) => ({
+        role: h.role as 'user' | 'assistant',
+        content: h.content,
+      })),
+      { role: 'user' as const, content: message },
+    ];
 
     const result = await this.sendRequest<ClaudeCompletionResponse>(
       {
         model,
         temperature: 0.7,
         system: systemContent,
-        messages: claudeMessages,
+        messages,
       },
       options?.apiKey,
       options?.baseUrl,
@@ -516,26 +572,18 @@ export class ClaudeProvider implements LlmProvider {
       return result as AiServiceResponse<any>;
     }
 
-    const reply = result.data.content?.[0]?.text || '';
+    const responseContent = result.data.content?.[0]?.text || '';
 
-    // 尝试提取建议的后续问题(如有)
-    const suggestions: string[] = [];
-    const suggestionsMatch = reply.match(
-      /(?:你可以问我|您可以问|建议问题|后续问题)[:：]([^]*?)(?=\n\n|$)/i,
-    );
-
-    if (suggestionsMatch && suggestionsMatch[1]) {
-      const sugText = suggestionsMatch[1].trim();
-      // 提取numbered列表或破折号列表
-      const sugItems = sugText.split(/\n[*\-\d\.]+\s+/).filter(Boolean);
-      suggestions.push(...sugItems);
-    }
+    // 生成唯一会话ID
+    const conversationId =
+      result.data.id ||
+      `claude-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
     return {
       success: true,
       data: {
-        response: reply,
-        conversationId: Date.now().toString(), // 生成一个简单的会话ID
+        response: responseContent,
+        conversationId,
       },
       usage: result.usage,
     };
@@ -620,6 +668,6 @@ export class ClaudeProvider implements LlmProvider {
    * 计算Token使用量
    */
   countTokens(input: string): number {
-    return this.tokenCounter.countTokens(input);
+    return this.tokenCounter.countTokens(input, 'claude');
   }
 }

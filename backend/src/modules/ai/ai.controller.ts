@@ -7,6 +7,7 @@ import {
   Req,
   BadRequestException,
   Query,
+  Param,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,6 +15,8 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiResponse,
+  ApiQuery,
+  ApiParam,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
@@ -233,5 +236,62 @@ export class AiController {
       endDate: query.endDate,
       groupBy: query.groupBy,
     });
+  }
+
+  @Get('health')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取AI服务健康状态' })
+  async getHealthStatus() {
+    const healthStatus = this.aiConfigService.getProvidersHealth();
+
+    return {
+      code: 0,
+      message: '获取AI服务健康状态成功',
+      data: healthStatus,
+    };
+  }
+
+  @Get('recommend-model/:task')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取AI模型推荐' })
+  @ApiParam({
+    name: 'task',
+    enum: ['code_generation', 'code_analysis', 'chat', 'optimization'],
+  })
+  @ApiQuery({ name: 'prioritizeSpeed', required: false, type: Boolean })
+  @ApiQuery({ name: 'prioritizeCost', required: false, type: Boolean })
+  async getRecommendedModel(
+    @Param('task')
+    task: 'code_generation' | 'code_analysis' | 'chat' | 'optimization',
+    @Query('prioritizeSpeed') prioritizeSpeed?: string | boolean,
+    @Query('prioritizeCost') prioritizeCost?: string | boolean,
+  ) {
+    const model = await this.aiConfigService.getRecommendedModel(
+      task,
+      prioritizeSpeed === true || prioritizeSpeed === 'true',
+      prioritizeCost === true || prioritizeCost === 'true',
+    );
+
+    return {
+      code: 0,
+      message: '获取AI模型推荐成功',
+      data: { model },
+    };
+  }
+
+  @Get('providers')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取支持的AI提供商及模型信息' })
+  async getSupportedProviders() {
+    const providers = this.aiConfigService.getSupportedProviders();
+
+    return {
+      code: 0,
+      message: '获取支持的AI提供商成功',
+      data: providers,
+    };
   }
 }

@@ -26,6 +26,8 @@ import * as bcrypt from 'bcryptjs'; // 引入 bcrypt
 import { Response } from 'express'; // 引入 Response 类型 (用于设置 cookie)
 import * as svgCaptcha from 'svg-captcha';
 import { Logger } from '@nestjs/common';
+import { MailService } from '../mail/mail.service';
+import * as crypto from 'crypto';
 
 // 定义一个接口来扩展 UserDocument，包含时间戳字段
 interface UserDocumentWithTimestamps extends UserDocument {
@@ -38,20 +40,8 @@ interface CaptchaDocumentWithText extends CaptchaDocument {
   text: string; // 明确定义 text 字段
 }
 
-//TODO:模拟邮件服务
-class MockEmailService {
-  async sendForgotPasswordEmail(email: string, code: string): Promise<void> {
-    console.log(`--- Mock Mail Service ---`);
-    console.log(`Sending password reset code to: ${email}`);
-    console.log(`Reset Code: ${code}`);
-    console.log(`-------------------------`);
-    // 在实际应用中，这里使用 nodemailer 等库发送真实的邮件
-  }
-}
-
 @Injectable()
 export class AuthService {
-  private readonly emailService = new MockEmailService(); //实例化模拟邮件服务
   private readonly bcryptSaltRounds = 10; // 定义 bcrypt 的 salt rounds
   private readonly logger = new Logger(AuthService.name);
 
@@ -59,6 +49,7 @@ export class AuthService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Captcha.name) private captchaModel: Model<CaptchaDocument>,
     private jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   // 获取图形验证码
@@ -166,6 +157,9 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: jwtConstants.accessTokenExpiresIn,
     });
+
+    // 在注册成功后发送欢迎邮件
+    await this.sendWelcomeEmail(savedUser);
 
     return {
       code: 0,
@@ -293,68 +287,64 @@ export class AuthService {
   }
 
   // 忘记密码
-  async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<void> {
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<{ success: boolean; message: string }> {
     const { email } = forgotPasswordDto;
 
     // 查找用户
     const user = await this.userModel.findOne({ email }).exec();
 
-    // 即使用户不存在也返回成功
-    // 这样可以防止用户枚举攻击，攻击者无法知道邮箱是否存在
     if (!user) {
-      this.logger.log(`尝试为不存在的邮箱 ${email} 重置密码`);
-      return;
+      // 出于安全考虑，即使用户不存在也返回相同的消息
+      return { success: true, message: '如果邮箱存在，将发送重置链接' };
     }
 
-    // 生成一次性、有时效的重置令牌
-    const resetToken = uuid.v4();
-    const resetTokenExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30分钟过期
+    // 生成重置token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 30 * 60 * 1000); // 30分钟后过期
 
-    // 存储哈希后的令牌和过期时间
-    user.passwordResetToken = await bcrypt.hash(
-      resetToken,
-      this.bcryptSaltRounds,
-    );
+    // 更新用户的重置token
+    user.passwordResetToken = resetToken;
     user.passwordResetExpires = resetTokenExpiry;
     await user.save();
 
-    // 构建重置链接
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+    // 发送重置邮件
+    const mailSent = await this.mailService.sendPasswordResetMail(
+      email,
+      resetToken,
+      user.username,
+    );
 
-    // 发送邮件
-    await this.emailService.sendForgotPasswordEmail(email, resetLink);
+    if (!mailSent) {
+      return { success: false, message: '邮件发送失败，请稍后重试' };
+    }
 
     this.logger.log(`为用户 ${email} 发送了密码重置邮件`);
+    return { success: true, message: '密码重置邮件已发送，请查收' };
   }
 
   // 重置密码
-  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {
+  async resetPassword(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<{ success: boolean; message: string }> {
     const { email, token, newPassword } = resetPasswordDto;
 
     // 查找用户
     const user = await this.userModel
       .findOne({
         email,
-        passwordResetExpires: { $gt: new Date() }, // 确保令牌未过期
+        passwordResetToken: token,
+        passwordResetExpires: { $gt: new Date() }, // token未过期
       })
       .exec();
 
     if (!user) {
-      throw new NotFoundException('重置链接无效或已过期');
-    }
-
-    // 验证重置令牌
-    if (!user.passwordResetToken) {
-      throw new UnauthorizedException('重置令牌不存在');
-    }
-
-    const isTokenValid = await bcrypt.compare(token, user.passwordResetToken);
-    if (!isTokenValid) {
-      throw new UnauthorizedException('重置令牌无效');
+      return { success: false, message: '重置链接无效或已过期' };
     }
 
     // 更新密码
-    user.password = newPassword;
+    user.password = await bcrypt.hash(newPassword, this.bcryptSaltRounds);
 
     // 清除重置令牌
     user.passwordResetToken = undefined;
@@ -365,7 +355,15 @@ export class AuthService {
 
     await user.save();
 
+    // 发送密码已修改通知
+    await this.mailService.sendNotificationMail(
+      email,
+      '密码已重置',
+      `<p>您好 ${user.username}，</p><p>您的密码已成功重置。如果这不是您本人的操作，请立即联系我们的支持团队。</p>`,
+    );
+
     this.logger.log(`用户 ${email} 成功重置了密码`);
+    return { success: true, message: '密码重置成功，请使用新密码登录' };
   }
 
   // 刷新 Access Token
@@ -440,6 +438,18 @@ export class AuthService {
       default:
         // 默认单位为秒
         return value * 1000;
+    }
+  }
+
+  // 在注册成功后发送欢迎邮件
+  private async sendWelcomeEmail(user: User): Promise<void> {
+    try {
+      await this.mailService.sendWelcomeMail(user.email, user.username);
+      this.logger.log(`欢迎邮件发送成功: ${user.email}`);
+      return;
+    } catch (error) {
+      this.logger.error(`欢迎邮件发送失败: ${error.message}`, error.stack);
+      return;
     }
   }
 }

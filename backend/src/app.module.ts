@@ -2,6 +2,7 @@ import { Module, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
+import mailConfig from './config/mail.config';
 import { MongooseModule } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -17,11 +18,12 @@ import { CommonModule } from './common/common.module';
 import { FileModule } from './modules/file/file.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
 import { AiModule } from './modules/ai/ai.module';
+import { MailModule } from './modules/mail/mail.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      load: [appConfig, databaseConfig],
+      load: [appConfig, databaseConfig, mailConfig],
       isGlobal: true, // 使配置模块在整个应用中可用
     }),
     MongooseModule.forRootAsync({
@@ -56,6 +58,9 @@ import { AiModule } from './modules/ai/ai.module';
 
     // AI模块
     AiModule,
+
+    // 邮件模块
+    MailModule,
 
     // 公共模块
     CommonModule,

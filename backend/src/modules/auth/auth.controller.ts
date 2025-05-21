@@ -130,11 +130,11 @@ export class AuthController {
    */
   @Post('forgot-password')
   @Public()
-  @ApiOperation({ summary: '忘记密码-发送验证码' })
+  @ApiOperation({ summary: '忘记密码-发送重置链接' })
   @ApiBody({ type: ForgotPasswordDto })
   @ApiResponse({
     status: 200,
-    description: '验证码发送成功',
+    description: '重置链接发送成功',
     type: SuccessResponseDto,
   })
   @ApiResponse({ status: 400, description: '参数校验失败' })
@@ -142,8 +142,12 @@ export class AuthController {
   async forgotPassword(
     @Body() forgotPasswordDto: ForgotPasswordDto,
   ): Promise<SuccessResponseDto> {
-    await this.authService.forgotPassword(forgotPasswordDto);
-    return { code: 0, message: '验证码已发送至您的邮箱，请查收' };
+    const result = await this.authService.forgotPassword(forgotPasswordDto);
+    return {
+      code: result.success ? 0 : 1000,
+      message: result.message,
+      success: result.success,
+    };
   }
 
   /**
@@ -163,11 +167,11 @@ export class AuthController {
   async resetPassword(
     @Body() resetPasswordDto: ResetPasswordDto,
   ): Promise<SuccessResponseDto> {
-    await this.authService.resetPassword(resetPasswordDto);
+    const result = await this.authService.resetPassword(resetPasswordDto);
     return {
-      code: 0,
-      message: '密码重置成功，请使用新密码登录',
-      success: true,
+      code: result.success ? 0 : 1000,
+      message: result.message,
+      success: result.success,
     };
   }
 

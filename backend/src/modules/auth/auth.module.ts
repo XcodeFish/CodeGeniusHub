@@ -10,7 +10,7 @@ import { Captcha, CaptchaSchema } from '../../shared/schemas/captcha.schema';
 import { JwtStrategy } from '../../common/strategies/jwt.strategy';
 import { jwtConstants } from '../../common/constants/constants';
 import { CommonModule } from '../../common/common.module';
-// import { MailModule } from '../mail/mail.module'; // 如果有真实的邮件模块
+import { MailModule } from '../mail/mail.module'; // 导入邮件模块
 
 @Module({
   imports: [
@@ -24,7 +24,7 @@ import { CommonModule } from '../../common/common.module';
       signOptions: { expiresIn: jwtConstants.accessTokenExpiresIn },
     }),
     CommonModule, // 导入CommonModule
-    // MailModule, // 如果有真实的邮件模块，在这里导入
+    MailModule, // 导入邮件模块
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

@@ -114,6 +114,54 @@ export class RollbackFileDto {
   commitMessage?: string;
 }
 
+// 文件锁定DTO
+export class LockFileDto {
+  @ApiProperty({
+    description: '锁定时长(分钟)',
+    example: 30,
+    required: false,
+  })
+  @IsOptional()
+  lockDuration?: number = 30;
+
+  @ApiProperty({
+    description: '锁定原因',
+    example: '进行重要更新',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  lockReason?: string;
+
+  @ApiProperty({
+    description: '是否强制锁定(覆盖他人锁)',
+    example: false,
+    required: false,
+  })
+  @IsOptional()
+  forceLock?: boolean = false;
+}
+
+// 文件解锁DTO
+export class UnlockFileDto {
+  @ApiProperty({
+    description: '解锁原因',
+    example: '已完成编辑',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  unlockReason?: string;
+
+  @ApiProperty({
+    description: '是否强制解锁(管理员操作)',
+    example: false,
+    required: false,
+  })
+  @IsOptional()
+  forceUnlock?: boolean = false;
+}
+
 // 添加版本标签DTO
 export class AddVersionTagDto {
   @ApiProperty({ description: '标签列表', example: ['stable', 'release'] })
@@ -130,7 +178,7 @@ export class AddVersionTagDto {
   })
   @IsString()
   @IsOptional()
-  tagColor?: string;
+  tagColor?: string = 'green';
 
   @ApiProperty({
     description: '重要程度',
@@ -140,7 +188,7 @@ export class AddVersionTagDto {
   })
   @IsString()
   @IsOptional()
-  importance?: string;
+  importance?: string = 'medium';
 
   @ApiProperty({
     description: '是否为发布版本',
@@ -148,7 +196,7 @@ export class AddVersionTagDto {
     required: false,
   })
   @IsOptional()
-  isReleaseVersion?: boolean;
+  isReleaseVersion?: boolean = false;
 
   @ApiProperty({
     description: '发布说明',
@@ -157,7 +205,7 @@ export class AddVersionTagDto {
   })
   @IsString()
   @IsOptional()
-  releaseNote?: string;
+  releaseNote?: string = '';
 
   @ApiProperty({
     description: '版本类型',
@@ -167,7 +215,7 @@ export class AddVersionTagDto {
   })
   @IsString()
   @IsOptional()
-  versionType?: string;
+  versionType?: string = 'minor';
 }
 
 // 版本查询参数DTO
@@ -197,7 +245,7 @@ export class VersionQueryDto {
     required: false,
   })
   @IsOptional()
-  onlyReleaseVersions?: boolean;
+  onlyReleaseVersions?: boolean = false;
 
   @ApiProperty({
     description: '最大版本数',
@@ -205,7 +253,7 @@ export class VersionQueryDto {
     required: false,
   })
   @IsOptional()
-  limit?: number;
+  limit?: number = 10;
 
   @ApiProperty({
     description: '创建者ID',
@@ -447,4 +495,151 @@ export class CompareVersionsResponseDto {
     type: [DiffResponseDto],
   })
   comparisons: any[];
+}
+
+// 文件变更历史统计DTO
+export class FileChangeStatisticsDto {
+  @ApiProperty({ description: '错误码', example: 0 })
+  code: number;
+
+  @ApiProperty({ description: '提示信息', example: '获取成功' })
+  message: string;
+
+  @ApiProperty({ description: '文件ID', example: '60d0fe4f5311236168a109ca' })
+  fileId: string;
+
+  @ApiProperty({ description: '文件名', example: 'index.js' })
+  filename: string;
+
+  @ApiProperty({ description: '总版本数', example: 15 })
+  totalVersions: number;
+
+  @ApiProperty({ description: '总编辑次数', example: 25 })
+  totalEdits: number;
+
+  @ApiProperty({ description: '总回滚次数', example: 3 })
+  totalRollbacks: number;
+
+  @ApiProperty({ description: '总添加行数', example: 120 })
+  totalAdditions: number;
+
+  @ApiProperty({ description: '总删除行数', example: 45 })
+  totalDeletions: number;
+
+  @ApiProperty({ description: '总修改行数', example: 165 })
+  totalChanges: number;
+
+  @ApiProperty({
+    description: '按用户统计的贡献',
+    example: [
+      {
+        userId: '60d0fe4f5311236168a109cc',
+        username: '张三',
+        edits: 15,
+        additions: 80,
+        deletions: 30,
+      },
+      {
+        userId: '60d0fe4f5311236168a109cd',
+        username: '李四',
+        edits: 10,
+        additions: 40,
+        deletions: 15,
+      },
+    ],
+  })
+  contributorStats: {
+    userId: string;
+    username: string;
+    edits: number;
+    additions: number;
+    deletions: number;
+  }[];
+
+  @ApiProperty({
+    description: '按时间段统计的变更',
+    example: [
+      { period: '2023-05', edits: 8, additions: 45, deletions: 20 },
+      { period: '2023-06', edits: 12, additions: 60, deletions: 15 },
+    ],
+  })
+  timelineStats: {
+    period: string;
+    edits: number;
+    additions: number;
+    deletions: number;
+  }[];
+
+  @ApiProperty({
+    description: '热点修改区域',
+    example: [
+      {
+        lineStart: 10,
+        lineEnd: 20,
+        frequency: 8,
+        lastEditedBy: '张三',
+        lastEditedAt: '2023-06-15T14:30:00Z',
+      },
+      {
+        lineStart: 50,
+        lineEnd: 55,
+        frequency: 5,
+        lastEditedBy: '李四',
+        lastEditedAt: '2023-06-10T09:15:00Z',
+      },
+    ],
+  })
+  hotspots: {
+    lineStart: number;
+    lineEnd: number;
+    frequency: number;
+    lastEditedBy: string;
+    lastEditedAt: string;
+  }[];
+}
+
+// 文件变更历史查询参数DTO
+export class FileChangeStatisticsQueryDto {
+  @ApiProperty({
+    description: '开始时间',
+    example: '2023-01-01T00:00:00Z',
+    required: false,
+  })
+  @IsOptional()
+  startDate?: string;
+
+  @ApiProperty({
+    description: '结束时间',
+    example: '2023-12-31T23:59:59Z',
+    required: false,
+  })
+  @IsOptional()
+  endDate?: string;
+
+  @ApiProperty({
+    description: '用户ID过滤',
+    example: '60d0fe4f5311236168a109cc',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  userId?: string;
+
+  @ApiProperty({
+    description: '是否包含回滚操作',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  includeRollbacks?: boolean = true;
+
+  @ApiProperty({
+    description: '时间分组粒度',
+    example: 'month',
+    enum: ['day', 'week', 'month', 'quarter', 'year'],
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  timeGrouping?: 'day' | 'week' | 'month' | 'quarter' | 'year' = 'month';
 }

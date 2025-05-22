@@ -14,7 +14,10 @@ import { UserProfile } from '@/types';
 const authService = {
   // 获取图形验证码
   getCaptcha(): Promise<CaptchaResponse> {
-    return http.get<ResponseData<CaptchaResponse>>('/auth/captcha').then(res => res.data!);
+    return http.get<ResponseData<CaptchaResponse>>('/auth/captcha', undefined, {
+      showSuccessMessage: false,
+      skipErrorHandler: false, // 确保错误被正确处理
+    }).then(res => res.data!);
   },
 
   // 登录

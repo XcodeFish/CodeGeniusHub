@@ -75,7 +75,7 @@ const RegisterForm: React.FC = () => {
             validateFirst={true}
             rules={[
               { required: true, message: '请输入用户名' },
-              { min: 3, max: 20, message: '用户名长度在3-20个字符之间' }
+              { min: 2, max: 20, message: '用户名长度在2-20个字符之间' }
             ]}
           >
             <Input 
@@ -92,9 +92,9 @@ const RegisterForm: React.FC = () => {
             rules={[
               { required: true, message: '请输入密码' },
               { min: 6, message: '密码长度至少为 6 位' },
-              { max: 20, message: '密码长度不能超过 20 位' },
+              { max: 12, message: '密码长度不能超过 12 位' },
               {
-                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^]{6,20}$/,
+                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^]{6,12}$/,
                 message: '密码必须包含大小写字母和数字'
               }
             ]}
@@ -114,9 +114,9 @@ const RegisterForm: React.FC = () => {
             rules={[
               { required: true, message: '请确认密码' },
               { min: 6, message: '密码长度至少为 6 位' },
-              { max: 20, message: '密码长度不能超过 20 位' },
+              { max: 12, message: '密码长度不能超过 12 位' },
               {
-                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^]{6,20}$/,
+                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^]{6,12}$/,
                 message: '密码必须包含大小写字母和数字'
               }
             ]}
@@ -134,12 +134,13 @@ const RegisterForm: React.FC = () => {
             className={styles.formItem}
             validateFirst={true}
             rules={[
+              { required: true, message: '请输入手机号' },
               { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号码', validateTrigger: 'onBlur' }
             ]}
           >
             <Input 
               prefix={<PhoneOutlined />} 
-              placeholder="请输入手机号（选填）" 
+              placeholder="请输入手机号" 
               size="large"
             />
           </Form.Item>

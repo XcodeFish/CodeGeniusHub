@@ -1,5 +1,5 @@
 // backend/src/modules/auth/auth.module.ts
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -11,6 +11,7 @@ import { JwtStrategy } from '../../common/strategies/jwt.strategy';
 import { jwtConstants } from '../../common/constants/constants';
 import { CommonModule } from '../../common/common.module';
 import { MailModule } from '../mail/mail.module'; // 导入邮件模块
+import { CaptchaRateLimiterMiddleware } from '../../common/middleware/rate-limiter.middleware';
 
 @Module({
   imports: [
@@ -30,4 +31,11 @@ import { MailModule } from '../mail/mail.module'; // 导入邮件模块
   providers: [AuthService, JwtStrategy],
   exports: [AuthService, JwtModule, PassportModule], // 导出以便其他模块使用 AuthGuard 或 JwtService
 })
-export class AuthModule {}
+export class AuthModule {
+  // 配置中间件
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CaptchaRateLimiterMiddleware)
+      .forRoutes({ path: 'auth/captcha', method: RequestMethod.GET });
+  }
+}

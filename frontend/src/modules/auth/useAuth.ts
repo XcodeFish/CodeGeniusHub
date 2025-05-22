@@ -1,9 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { message } from 'antd';
 import { useUserStore } from '@/stores/userStore';
 import { LoginParams, RegisterParams } from '@/types/auth';
 import { UserProfile, User } from '@/types/user';
 import authService from '@/services/auth';
+import { AxiosError } from 'axios';
+
 // 类型转换工具函数
 const mapRoleToStoreRole = (role: string): 'admin' | 'editor' | 'viewer' => {
   if (role === 'admin') return 'admin';
@@ -33,26 +35,26 @@ export function useAuth() {
 
   // 获取验证码
   const getCaptcha = useCallback(async () => {
-  try {
-    setLoading(true);
-    const res = await authService.getCaptcha();
-    console.log("res",res);
-    
-    setCaptchaImg(res.captchaImg);
-    setCaptchaId(res.captchaId);
-    return res;
-  } catch (error) {
-    console.error('获取验证码失败:', error);
-    message.error('获取验证码失败，请稍后再试');
-    // 返回一个空对象，保证函数始终有返回值
-    return {
-      captchaImg: '',
-      captchaId: ''
-    };
-  } finally {
-    setLoading(false);
-  }
-}, []);
+    try {
+      setLoading(true);
+      const res = await authService.getCaptcha();
+      
+      setCaptchaImg(res.captchaImg);
+      setCaptchaId(res.captchaId);
+      return res;
+    } catch (error: unknown) {
+      console.error('获取验证码失败:', error);
+      
+      // 错误已经由请求拦截器统一处理，这里不需要再显示消息
+      // 但仍需要返回一个默认对象
+      return {
+        captchaImg: '',
+        captchaId: ''
+      };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // 登录
   const login = useCallback(async (params: Omit<LoginParams, 'captchaId'> & { captchaCode: string }) => {

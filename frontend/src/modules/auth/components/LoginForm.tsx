@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '@/modules/auth/useAuth';
 import styles from '@/styles/Login.module.scss';
+import { svgToDataUri } from '@/utils/svg-util';
 
 /**
  * 登录表单组件
@@ -22,7 +23,11 @@ const LoginForm: React.FC = () => {
 
   // 刷新验证码
   const refreshCaptcha = () => {
-    getCaptcha();
+    if (loading) return; // 如果正在加载中，不允许重复请求
+    getCaptcha().catch(err => {
+      // 错误已由请求拦截器统一处理，这里不需要额外处理
+      console.error('获取验证码失败:', err);
+    });
   };
 
   // 提交表单
@@ -36,7 +41,7 @@ const LoginForm: React.FC = () => {
       });
 
       message.success('登录成功');
-      router.push('/');
+      router.push('/dashboard');
     } catch (error: any) {
       console.error('登录失败:', error);
     }
@@ -127,7 +132,7 @@ const LoginForm: React.FC = () => {
               >
                 {captchaImg ? (
                   <img 
-                    src={`data:image/svg+xml;base64,${btoa(captchaImg)}`} 
+                    src={svgToDataUri(captchaImg)} 
                     alt="验证码" 
                     className={styles.captchaImg}
                   />

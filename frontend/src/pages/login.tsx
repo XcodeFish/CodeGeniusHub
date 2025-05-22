@@ -9,10 +9,10 @@ export default function LoginPage() {
   const router = useRouter();
   const { token } = useUserStore();
   
-  // 如果已登录，重定向到首页
+  // 如果已登录，重定向到仪表盘
   useEffect(() => {
     if (token) {
-      router.push('/');
+      router.push('/dashboard');
     }
   }, [token, router]);
 

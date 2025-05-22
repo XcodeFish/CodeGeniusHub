@@ -102,6 +102,14 @@ request.interceptors.response.use(
         case 404:
           message.error('请求的资源不存在');
           break;
+        case 429:
+          // 处理频率限制错误，显示自定义消息
+          if (error.response.data && error.response.data.message) {
+            message.warning(error.response.data.message);
+          } else {
+            message.warning('请求过于频繁，请稍后再试');
+          }
+          break;
         case 500:
           message.error('服务器内部错误');
           break;

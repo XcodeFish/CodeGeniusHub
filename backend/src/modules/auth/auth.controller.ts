@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  HttpException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -44,8 +45,23 @@ export class AuthController {
   @Public()
   @ApiOperation({ summary: '获取图形验证码' })
   @ApiResponse({ status: 200, description: '获取成功，返回验证码信息' })
+  @ApiResponse({ status: 429, description: '请求过于频繁' })
   async getCaptcha(): Promise<CaptchaResponseDto> {
-    return this.authService.generateCaptcha();
+    try {
+      return await this.authService.generateCaptcha();
+    } catch (error) {
+      // 中间件已经处理了频率限制错误，这里处理其他可能的错误
+      if (error.response && error.response.code === 1429) {
+        throw error; // 让中间件的错误直接传递
+      }
+      throw new HttpException(
+        {
+          code: 1000,
+          message: '获取验证码失败，请稍后再试',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   /**

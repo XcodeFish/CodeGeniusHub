@@ -4,6 +4,8 @@ import {
   UnauthorizedException,
   BadRequestException,
   NotFoundException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, HydratedDocument } from 'mongoose';
@@ -54,28 +56,50 @@ export class AuthService {
 
   // 获取图形验证码
   async generateCaptcha(): Promise<CaptchaResponseDto> {
-    const { text, data } = svgCaptcha.create({
-      size: 6,
-      noise: 2,
-      ignoreChars: '0oO1ilI', // 排除这些字符
-    });
-    const captchaId = uuid.v4();
-    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3分钟有效期
-    console.log('text', text);
-    const newCaptcha = new this.captchaModel({
-      captchaId,
-      text: text,
-      expiresAt,
-    });
-    await newCaptcha.save();
+    try {
+      // 创建验证码，确保所有参数正确
+      const captcha = svgCaptcha.create({
+        size: 6, // 验证码长度
+        noise: 2, // 干扰线条数量
+        ignoreChars: '0oO1ilI', // 排除易混淆字符
+        width: 160,
+        height: 60,
+        fontSize: 50,
+        color: true,
+        background: '#f0f0f0',
+      });
 
-    return {
-      code: 0,
-      message: '获取验证码成功',
-      captchaId,
-      captchaImg: data,
-      expiresAt,
-    };
+      const captchaId = uuid.v4();
+      const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3分钟有效期
+
+      this.logger.debug(`生成验证码: ${captcha.text}, ID: ${captchaId}`);
+
+      // 保存验证码到数据库
+      const newCaptcha = new this.captchaModel({
+        captchaId,
+        text: captcha.text,
+        expiresAt,
+      });
+      await newCaptcha.save();
+
+      // 确保SVG格式正确，svg-captcha生成的SVG就是标准格式，直接返回即可
+      return {
+        code: 0,
+        message: '获取验证码成功',
+        captchaId,
+        captchaImg: captcha.data,
+        expiresAt,
+      };
+    } catch (error) {
+      this.logger.error('生成验证码失败', error);
+      throw new HttpException(
+        {
+          code: 1006,
+          message: '生成验证码失败，请稍后再试',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   // 验证图形验证码

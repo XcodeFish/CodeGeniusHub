@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Form, Input, Button, Checkbox, message, Card, Space } from 'antd';
+import { Form, Input, Button, Checkbox, Card, Space } from 'antd';
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined, EyeOutlined, EyeInvisibleOutlined, RobotOutlined, CustomerServiceOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '@/modules/auth/useAuth';
 import styles from '@/styles/Login.module.scss';
 import { svgToDataUri } from '@/utils/svg-util';
+import messageUtil from '@/utils/message-util';
 
 /**
  * 登录表单组件
@@ -13,7 +14,7 @@ import { svgToDataUri } from '@/utils/svg-util';
 const LoginForm: React.FC = () => {
   const [form] = Form.useForm();
   const router = useRouter();
-  const { loading, captchaImg, getCaptcha, login } = useAuth();
+  const { loading, captchaImg, getCaptcha, login, captchaTimeLeft } = useAuth();
   const [remember, setRemember] = useState(false);
 
   // 组件挂载时获取验证码
@@ -23,7 +24,13 @@ const LoginForm: React.FC = () => {
 
   // 刷新验证码
   const refreshCaptcha = () => {
-    if (loading) return; // 如果正在加载中，不允许重复请求
+    if (loading || captchaTimeLeft > 0) {
+      if (captchaTimeLeft > 0) {
+        messageUtil.warning(`操作过于频繁，请${captchaTimeLeft}秒后再试`);
+      }
+      return;
+    }
+    
     getCaptcha().catch(err => {
       // 错误已由请求拦截器统一处理，这里不需要额外处理
       console.error('获取验证码失败:', err);
@@ -40,11 +47,17 @@ const LoginForm: React.FC = () => {
         remember
       });
 
-      message.success('登录成功');
+      messageUtil.success('登录成功');
       router.push('/dashboard');
     } catch (error: any) {
       console.error('登录失败:', error);
     }
+  };
+
+  // 计算验证码按钮样式
+  const captchaButtonStyle = {
+    cursor: captchaTimeLeft > 0 || loading ? 'not-allowed' : 'pointer',
+    position: 'relative' as const
   };
 
   return (
@@ -129,16 +142,24 @@ const LoginForm: React.FC = () => {
               <div
                 className={styles.captchaImg}
                 onClick={refreshCaptcha}
+                style={captchaButtonStyle}
               >
                 {captchaImg ? (
-                  <img 
-                    src={svgToDataUri(captchaImg)} 
-                    alt="验证码" 
-                    className={styles.captchaImg}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <img 
+                      src={svgToDataUri(captchaImg)} 
+                      alt="验证码" 
+                      className={styles.captchaImg}
+                    />
+                    {captchaTimeLeft > 0 && (
+                      <div className={styles.captchaCountdown}>
+                        {captchaTimeLeft}s
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div>
-                    点击获取验证码
+                    {captchaTimeLeft > 0 ? `${captchaTimeLeft}秒后可重试` : '点击获取验证码'}
                   </div>
                 )}
               </div>

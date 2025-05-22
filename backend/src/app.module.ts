@@ -19,6 +19,7 @@ import { FileModule } from './modules/file/file.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
 import { AiModule } from './modules/ai/ai.module';
 import { MailModule } from './modules/mail/mail.module';
+import { MenuModule } from './modules/menu/menu.module';
 
 @Module({
   imports: [
@@ -64,6 +65,9 @@ import { MailModule } from './modules/mail/mail.module';
 
     // 公共模块
     CommonModule,
+
+    // 菜单模块
+    MenuModule,
   ],
   controllers: [],
   providers: [],

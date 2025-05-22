@@ -5,6 +5,11 @@ import { LoginParams, RegisterParams } from '@/types/auth';
 import { UserProfile, User } from '@/types/user';
 import authService from '@/services/auth';
 import { AxiosError } from 'axios';
+import messageUtil from '@/utils/message-util';
+import { checkRateLimit, recordRequest } from '@/utils/rate-limiter-util';
+
+// 验证码请求的唯一标识
+const CAPTCHA_REQUEST_KEY = 'auth_captcha_request';
 
 // 类型转换工具函数
 const mapRoleToStoreRole = (role: string): 'admin' | 'editor' | 'viewer' => {
@@ -32,12 +37,49 @@ export function useAuth() {
   const [loading, setLoading] = useState(false);
   const [captchaImg, setCaptchaImg] = useState('');
   const [captchaId, setCaptchaId] = useState('');
+  const [captchaTimeLeft, setCaptchaTimeLeft] = useState(0); // 存储验证码剩余冷却时间
 
   // 获取验证码
   const getCaptcha = useCallback(async () => {
+    // 先检查前端频率限制
+    if (captchaTimeLeft > 0) {
+      messageUtil.warning(`操作过于频繁，请${captchaTimeLeft}秒后再试`);
+      return {
+        captchaImg: '',
+        captchaId: ''
+      };
+    }
+
+    // 检查频率限制
+    const checkResult = checkRateLimit(CAPTCHA_REQUEST_KEY);
+    if (!checkResult.allowed) {
+      // 更新剩余时间状态
+      setCaptchaTimeLeft(checkResult.timeLeft);
+      
+      // 启动倒计时
+      const timer = setInterval(() => {
+        setCaptchaTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      messageUtil.warning(checkResult.message);
+      return {
+        captchaImg: '',
+        captchaId: ''
+      };
+    }
+    
     try {
       setLoading(true);
       const res = await authService.getCaptcha();
+      
+      // 请求成功后记录时间，用于前端频率控制
+      recordRequest(CAPTCHA_REQUEST_KEY);
       
       setCaptchaImg(res.captchaImg);
       setCaptchaId(res.captchaId);
@@ -54,7 +96,7 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [captchaTimeLeft]);
 
   // 登录
   const login = useCallback(async (params: Omit<LoginParams, 'captchaId'> & { captchaCode: string }) => {
@@ -76,7 +118,7 @@ export function useAuth() {
       const mappedUser = mapUserProfileToUser(userInfo);
       setUser(mappedUser, res.token, mapRoleToStoreRole(userInfo.permission), false);
       
-      message.success('登录成功');
+      messageUtil.success('登录成功');
       return res;
     } catch (error) {
       console.error('登录失败:', error);
@@ -181,6 +223,7 @@ export function useAuth() {
     loading,
     captchaImg,
     captchaId,
+    captchaTimeLeft, // 导出剩余时间，供UI组件使用
     getCaptcha,
     login,
     register,

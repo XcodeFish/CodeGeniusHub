@@ -12,6 +12,8 @@ import { useUserStore } from '@/stores/userStore';
 import { useAuth } from '@/modules/auth/useAuth';
 import styles from './layout.module.scss';
 import type { MenuProps } from 'antd';
+import { openUserProfileModal } from '@/modules/auth/profile/UserProfileContent';
+
 
 const { Header: AntHeader } = Layout;
 
@@ -31,7 +33,8 @@ const Header: React.FC<HeaderProps> = ({ collapsed, toggleSidebar }) => {
     {
       key: 'profile',
       label: '个人资料',
-      icon: <UserOutlined />
+      icon: <UserOutlined />,
+      onClick: () => handleClick()
     },
     {
       key: 'settings',
@@ -48,6 +51,11 @@ const Header: React.FC<HeaderProps> = ({ collapsed, toggleSidebar }) => {
       onClick: () => logout()
     }
   ];
+
+  const handleClick = () => {
+    console.log('点击了', user);
+    openUserProfileModal(user, true);
+  };
 
   return (
     <AntHeader className={styles.header}>
@@ -75,7 +83,9 @@ const Header: React.FC<HeaderProps> = ({ collapsed, toggleSidebar }) => {
           placement="bottomRight"
           trigger={['click']}
         >
-          <Space className={styles.userDropdown}>
+          <Space className={styles.userDropdown} onClick={(e) => {
+            e.stopPropagation();
+          }}>
             <Avatar icon={<UserOutlined />} />
             <span className={styles.username}>{user?.username || '用户'}</span>
           </Space>

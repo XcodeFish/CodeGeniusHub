@@ -3,6 +3,7 @@ export interface UserBase {
   id: string; // 与后端返回结构保持一致，使用id而非userId
   username: string;
   email: string;
+  userId?: string;
 }
 
 // 用户详情信息类型
@@ -21,6 +22,8 @@ export interface User {
   email: string;
   permission: string; // 对应后端返回的permission
   phone?: string;
+  avatar?: string;
+  userId?: string;
 }
 
 // 用户资料更新参数

@@ -1,8 +1,15 @@
 import { create } from 'zustand';
 import { User } from '@/types/user';
-
+const defaultUser: User = {
+  id: '',
+  username: '',
+  email: '',
+  permission: 'viewer',
+  phone: '',
+  avatar: '',
+}
 interface UserState {
-  user: User | null;
+  user: User | typeof defaultUser;
   token: string;
   permission: 'admin' | 'editor' | 'viewer';
   firstLogin: boolean;
@@ -14,13 +21,13 @@ interface UserState {
 }
 
 export const useUserStore = create<UserState>((set) => ({
-  user: null,
+  user: defaultUser,
   token: '',
   permission: 'viewer',
   firstLogin: false,
   loading: false,
-  setUser: (user, token, permission, firstLogin) => set({ user, token, permission, firstLogin }),
+  setUser: (user, token, permission, firstLogin) => set({ user: user || defaultUser, token, permission, firstLogin }),
   setFirstLogin: (firstLogin) => set({ firstLogin }),
   setLoading: (loading) => set({ loading }),
-  logout: () => set({ user: null, token: '', permission: 'viewer', firstLogin: false }),
+  logout: () => set({ user: defaultUser, token: '', permission: 'viewer', firstLogin: false }),
 })); 

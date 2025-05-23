@@ -18,7 +18,7 @@ const mapRoleToStoreRole = (role: string): 'admin' | 'editor' | 'viewer' => {
 // 将UserProfile映射为User的函数
 const mapUserProfileToUser = (profile: UserProfile): User => {
   return {
-    id: profile.id,
+    id: profile.id || profile.userId || '',
     username: profile.username,
     email: profile.email,
     permission: profile.permission,
@@ -163,7 +163,16 @@ export function useAuth() {
   // 自动登录（检查token有效性并在需要时刷新）
   const autoLogin = useCallback(async () => {
     try {
+      // 检查localStorage中是否存在token
       const token = getToken();
+      const currentState = useUserStore.getState();
+      
+      // 首先检查是否已有完整的登录状态(token+用户信息)
+      if (token && currentState.user && (currentState.user.id || currentState.user.userId)) {
+        console.log('已有完整登录状态，跳过所有自动登录流程');
+        return true; // 直接返回，不做任何API请求
+      }
+      
       if (!token) {
         console.log('本地不存在token，无法进行自动登录');
         return false;
@@ -183,31 +192,32 @@ export function useAuth() {
       if (!tokenExpiring) {
         console.log('token有效且未接近过期，使用现有登录状态');
         
-        // 如果用户信息在store中，则无需任何操作，直接返回成功
-        const currentUser = useUserStore.getState().user;
-        if (currentUser && currentUser.id) {
-          console.log('用户信息已存在，无需自动登录');
-          return true;
-        }
-        
-        // 如果store中没有用户信息但token有效，则静默获取用户信息
+        // 获取用户信息
         try {
           setLoading(true);
-          const userInfo = await authService.getCurrentUser();
+          let userInfo = await authService.getCurrentUser();
+          userInfo = {
+            ...userInfo,
+            id: userInfo.userId || ''  //这里为森么这样写 是因为 getCurrentUser接口返回的是id 登录接口返回是id
+          }
+          console.log('获取到的用户信息:', userInfo);
           const mappedUser = mapUserProfileToUser(userInfo);
           setUser(mappedUser, token, mapRoleToStoreRole(userInfo.permission), isRemembered);
           return true;
         } catch (error: any) {
           console.error('获取用户信息失败:', error);
+
+          // 不论什么错误都清除token，确保状态一致
+          clearTokenInfo();
           
           // 如果是401错误，表示token实际已失效
           if (error.response && error.response.status === 401) {
-            clearTokenInfo();
             messageUtil.warning('登录已失效，请重新登录');
-            return false;
+          } else {
+            messageUtil.error('获取用户信息失败，请重新登录');
           }
           
-          throw error;
+          return false;
         } finally {
           setLoading(false);
         }

@@ -107,21 +107,58 @@ export class AuthService {
     captchaId: string,
     captchaCode: string,
   ): Promise<boolean> {
-    const captcha = (await this.captchaModel
+    this.logger.log(
+      `验证图形验证码 - 验证码ID: ${captchaId}, 用户输入: ${captchaCode}`,
+    );
+
+    // 查找验证码记录
+    const captcha = await this.captchaModel
       .findOne({
         captchaId,
-        expiresAt: { $gt: new Date() }, // 检查是否过期
+        expiresAt: { $gt: new Date() }, // 验证码未过期
       })
-      .exec()) as CaptchaDocumentWithText;
+      .exec();
+
+    this.logger.log(
+      `验证码查询结果: ${captcha ? '找到验证码记录' : '未找到验证码记录或已过期'}`,
+    );
 
     if (!captcha) {
-      return false; // 验证码不存在或已过期
+      this.logger.warn(
+        `验证失败: 验证码不存在或已过期 - 验证码ID: ${captchaId}`,
+      );
+      return false;
     }
 
-    // 验证成功后删除验证码，防止重复使用
-    await this.captchaModel.deleteOne({ captchaId }).exec();
+    // 检查验证码是否已使用
+    if (captcha.isUsed) {
+      this.logger.warn(`验证失败: 验证码已被使用 - 验证码ID: ${captchaId}`);
+      return false;
+    }
 
-    return captcha.text.toUpperCase() === captchaCode.toUpperCase();
+    // 断言Captcha文档有text字段
+    const captchaWithText = captcha as CaptchaDocumentWithText;
+    if (!captchaWithText.text) {
+      this.logger.warn(`验证失败: 验证码文本不存在 - 验证码ID: ${captchaId}`);
+      return false;
+    }
+
+    // 进行不区分大小写的验证
+    const isValid =
+      captchaWithText.text.toLowerCase() === captchaCode.toLowerCase();
+
+    this.logger.log(
+      `验证码比对结果: ${isValid ? '匹配' : '不匹配'}, 预期值: ${captchaWithText.text.toLowerCase()}, 输入值: ${captchaCode.toLowerCase()}`,
+    );
+
+    if (isValid) {
+      // 标记验证码已使用
+      captcha.isUsed = true;
+      await captcha.save();
+      this.logger.log(`验证码已标记为已使用 - 验证码ID: ${captchaId}`);
+    }
+
+    return isValid;
   }
 
   // 注册用户
@@ -198,100 +235,143 @@ export class AuthService {
     loginDto: LoginDto,
     response?: Response,
   ): Promise<LoginResponseDto> {
-    const isCaptchaValid = await this.verifyCaptcha(
-      loginDto.captchaId,
-      loginDto.captchaCode,
-    );
+    try {
+      this.logger.log(`开始登录流程 - 用户标识: ${loginDto.identifier}`);
+      this.logger.log(`检查验证码 - 验证码ID: ${loginDto.captchaId}`);
 
-    if (!isCaptchaValid) {
-      throw new BadRequestException('图形验证码错误或已失效');
-    }
-
-    // 根据标识查找用户（支持邮箱/用户名/手机号）
-    const user = await this.userModel
-      .findOne({
-        $or: [
-          { email: loginDto.identifier },
-          { username: loginDto.identifier },
-          { phone: loginDto.identifier },
-        ],
-      })
-      .exec();
-
-    if (!user) {
-      throw new UnauthorizedException('用户不存在或密码错误');
-    }
-
-    // 校验密码
-    const isPasswordValid = await bcrypt.compare(
-      loginDto.password,
-      user.password,
-    );
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('用户不存在或密码错误');
-    }
-
-    // 生成 JWT access token
-    const payload = {
-      sub: user._id.toString(),
-      username: user.username,
-      permission: user.permission,
-    };
-
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: jwtConstants.accessTokenExpiresIn,
-    });
-
-    let refreshToken: string | undefined;
-    // 如果用户勾选了"记住我"，生成 refresh token 并设置 httpOnly cookie
-    if (loginDto.remember && response) {
-      // 生成 refresh token (通常使用长生命周期)
-      refreshToken = this.jwtService.sign(payload, {
-        expiresIn: jwtConstants.refreshTokenExpiresIn,
-      });
-
-      // 将 refresh token 的 hash 存储到数据库中，用于校验和吊销
-      const hashedRefreshToken = await bcrypt.hash(
-        refreshToken,
-        this.bcryptSaltRounds,
+      // 验证图形验证码
+      const captchaVerified = await this.verifyCaptcha(
+        loginDto.captchaId,
+        loginDto.captchaCode,
       );
-      user.currentRefreshTokenHash = hashedRefreshToken;
-      await user.save(); // 保存用户文档更新
 
-      // 设置 httpOnly cookie
-      response.cookie(jwtConstants.refreshTokenCookieName, refreshToken, {
-        httpOnly: true, // 重要的安全设置，防止 XSS 攻击获取 cookie
-        secure: process.env.NODE_ENV === 'production', // 只在生产环境使用 HTTPS 时发送 cookie
-        maxAge: this.getTokenExpirationMilliseconds(
-          jwtConstants.refreshTokenExpiresIn,
-        ), // cookie 的过期时间
+      this.logger.log(`验证码验证结果: ${captchaVerified ? '通过' : '失败'}`);
+
+      if (!captchaVerified) {
+        this.logger.warn(
+          `登录失败: 验证码错误 - 用户标识: ${loginDto.identifier}, 验证码ID: ${loginDto.captchaId}`,
+        );
+        throw new UnauthorizedException('验证码错误或已失效');
+      }
+
+      // 查找用户
+      this.logger.log(`查找用户 - 标识: ${loginDto.identifier}`);
+
+      // MongoDB查询使用$or运算符，允许多字段匹配
+      const user = await this.userModel
+        .findOne({
+          $or: [
+            { username: loginDto.identifier }, // 使用用户名登录
+            { email: loginDto.identifier }, // 使用邮箱登录
+            { phone: loginDto.identifier }, // 使用手机号登录
+          ],
+        })
+        .exec();
+
+      this.logger.log(`用户查询结果: ${user ? '找到用户' : '未找到用户'}`);
+
+      // 检查用户是否存在
+      if (!user) {
+        this.logger.warn(
+          `登录失败: 用户不存在 - 用户标识: ${loginDto.identifier}`,
+        );
+        throw new UnauthorizedException('用户不存在或密码错误');
+      }
+
+      // 验证密码
+      this.logger.log(`验证用户密码 - 用户ID: ${user._id}`);
+      const isPasswordValid = await bcrypt.compare(
+        loginDto.password,
+        user.password,
+      );
+
+      this.logger.log(`密码验证结果: ${isPasswordValid ? '有效' : '无效'}`);
+
+      if (!isPasswordValid) {
+        this.logger.warn(
+          `登录失败: 密码错误 - 用户标识: ${loginDto.identifier}`,
+        );
+        throw new UnauthorizedException('用户不存在或密码错误');
+      }
+
+      // 生成 JWT access token
+      const payload = {
+        sub: user._id.toString(),
+        username: user.username,
+        permission: user.permission,
+      };
+
+      this.logger.log(`为用户生成Token payload - ${JSON.stringify(payload)}`);
+
+      const accessToken = this.jwtService.sign(payload, {
+        expiresIn: jwtConstants.accessTokenExpiresIn,
       });
+
+      this.logger.log(`生成的access token: ${accessToken.substring(0, 20)}...`);
+
+      let refreshToken: string | undefined;
+      // 如果用户勾选了"记住我"，生成 refresh token 并设置 httpOnly cookie
+      if (loginDto.remember && response) {
+        this.logger.log(`用户启用了"记住我"功能，生成刷新令牌`);
+
+        // 生成 refresh token (通常使用长生命周期)
+        refreshToken = this.jwtService.sign(payload, {
+          expiresIn: jwtConstants.refreshTokenExpiresIn,
+        });
+
+        // 将 refresh token 的 hash 存储到数据库中，用于校验和吊销
+        const hashedRefreshToken = await bcrypt.hash(
+          refreshToken,
+          this.bcryptSaltRounds,
+        );
+        user.currentRefreshTokenHash = hashedRefreshToken;
+        await user.save(); // 保存用户文档更新
+
+        // 设置 httpOnly cookie
+        response.cookie(jwtConstants.refreshTokenCookieName, refreshToken, {
+          httpOnly: true, // 重要的安全设置，防止 XSS 攻击获取 cookie
+          secure: process.env.NODE_ENV === 'production', // 只在生产环境使用 HTTPS 时发送 cookie
+          maxAge: this.getTokenExpirationMilliseconds(
+            jwtConstants.refreshTokenExpiresIn,
+          ), // cookie 的过期时间
+        });
+
+        this.logger.log(
+          `已设置刷新令牌Cookie, 过期时间: ${jwtConstants.refreshTokenExpiresIn}`,
+        );
+      }
+
+      // 将用户文档转换为 DTO (不包含敏感信息如密码)
+      // 使用类型断言 UserDocumentWithTimestamps 来访问可能的 createdAt 和 updatedAt
+      const userObject = user.toObject() as UserDocumentWithTimestamps;
+
+      const userDto: UserDto = {
+        id: userObject._id.toString(),
+        username: userObject.username,
+        email: userObject.email,
+        phone: userObject.phone,
+        createdAt: userObject.createdAt, // 使用类型断言访问 createdAt
+        updatedAt: userObject.updatedAt, // 使用类型断言访问 updatedAt
+        permission: userObject.permission,
+        firstLogin: userObject.firstLogin,
+        // 根据 UserDto 的定义添加其他字段
+      };
+
+      this.logger.log(
+        `登录成功 - 用户ID: ${userDto.id}, 用户名: ${userDto.username}, 返回用户信息: ${JSON.stringify(userDto)}`,
+      );
+
+      return {
+        code: 0,
+        message: '登录成功',
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        user: userDto,
+      };
+    } catch (error) {
+      this.logger.error(`登录过程中发生异常: ${error.message}`, error.stack);
+      throw error; // 继续抛出异常，让上层处理
     }
-
-    // 将用户文档转换为 DTO (不包含敏感信息如密码)
-    // 使用类型断言 UserDocumentWithTimestamps 来访问可能的 createdAt 和 updatedAt
-    const userObject = user.toObject() as UserDocumentWithTimestamps;
-
-    const userDto: UserDto = {
-      id: userObject._id.toString(),
-      username: userObject.username,
-      email: userObject.email,
-      phone: userObject.phone,
-      createdAt: userObject.createdAt, // 使用类型断言访问 createdAt
-      updatedAt: userObject.updatedAt, // 使用类型断言访问 updatedAt
-      permission: userObject.permission,
-      firstLogin: userObject.firstLogin,
-      // 根据 UserDto 的定义添加其他字段
-    };
-
-    return {
-      code: 0,
-      message: '登录成功',
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      user: userDto,
-    };
   }
 
   // 登出

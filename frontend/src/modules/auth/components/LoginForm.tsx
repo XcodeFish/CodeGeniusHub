@@ -7,6 +7,7 @@ import { useAuth } from '@/modules/auth/useAuth';
 import styles from '@/styles/Login.module.scss';
 import { svgToDataUri } from '@/utils/svg-util';
 import messageUtil from '@/utils/message-util';
+import { useMenu } from '@/hooks/useMenu';
 
 /**
  * 登录表单组件
@@ -16,6 +17,7 @@ const LoginForm: React.FC = () => {
   const router = useRouter();
   const { loading, captchaImg, getCaptcha, login, captchaTimeLeft } = useAuth();
   const [remember, setRemember] = useState(false);
+  const { fetchMenus } = useMenu();
 
   // 组件挂载时获取验证码
   useEffect(() => {
@@ -40,17 +42,24 @@ const LoginForm: React.FC = () => {
   // 提交表单
   const handleSubmit = async (values: any) => {
     try {
-      await login({
-        email: values.username,
+      const loginResult = await login({
+        identifier: values.identifier,
         password: values.password,
         captchaCode: values.captcha,
         remember
       });
 
+      // 登录成功后立即获取菜单数据
+      await fetchMenus();
+      
       messageUtil.success('登录成功');
-      router.push('/dashboard');
+      
+      // 立即跳转到首页，不等待其他请求完成
+      // 使用replace而不是push，防止返回到登录页
+      router.replace('/dashboard');
     } catch (error: any) {
       console.error('登录失败:', error);
+      // 登录失败时不做任何导航，保持在登录页面
     }
   };
 
@@ -76,7 +85,7 @@ const LoginForm: React.FC = () => {
           validateTrigger={['onChange', 'onBlur']}
         >
           <Form.Item
-            name="username"
+            name="identifier"
             validateFirst={true}
             className={styles.formItem}
             rules={[
@@ -103,10 +112,10 @@ const LoginForm: React.FC = () => {
             rules={[
               { required: true, message: '请输入密码' },
               { min: 6, message: '密码长度至少为 6 位' },
-              { max: 20, message: '密码长度不能超过 20 位' },
+              { max: 12, message: '密码长度不能超过 12 位' },
               {
-                pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[^]{6,20}$/,
-                message: '密码必须包含大小写字母和数字'
+                pattern: /^(?=.*[a-z])(?=.*\d)[^]{6,12}$/,
+                message: '密码必须包含字母和数字'
               }
             ]}
           >

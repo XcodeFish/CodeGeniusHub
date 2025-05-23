@@ -1,6 +1,6 @@
 // 基础用户信息
 export interface UserBase {
-  userId: string;
+  id: string; // 与后端返回结构保持一致，使用id而非userId
   username: string;
   email: string;
 }
@@ -9,11 +9,14 @@ export interface UserBase {
 export interface UserProfile extends UserBase {
   permission: string;
   phone?: string;
+  firstLogin?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 // 前端存储用户信息类型 - 与UserStore保持一致
 export interface User {
-  id: string; // 对应后端的userId 
+  id: string; // 对应后端的id 
   username: string;
   email: string;
   permission: string; // 对应后端返回的permission

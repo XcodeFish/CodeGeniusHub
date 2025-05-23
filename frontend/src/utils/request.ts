@@ -13,10 +13,20 @@ const ERROR_CODE_MAP: Record<number, string> = {
   1006: '服务器内部错误'
 };
 
+// 扩展AxiosRequestConfig类型，支持自定义选项
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    skipErrorHandler?: boolean;
+    showSuccessMessage?: boolean;
+    successMessage?: string;
+  }
+}
+
 // 创建axios实例
 const request = axios.create({
   baseURL: apiConfig.baseUrl,
   timeout: apiConfig.timeout,
+  withCredentials: true, // 默认允许跨域携带cookie
 });
 
 // 请求拦截器
@@ -40,6 +50,11 @@ request.interceptors.response.use(
     const res = response.data;
     // 如果返回的code不是0，则表示请求出错
     if (res.code !== 0) {
+      // 如果请求配置了skipErrorHandler，则不进行错误处理
+      if (response.config.skipErrorHandler) {
+        return Promise.reject(res);
+      }
+      
       // 根据错误码处理不同情况
       switch (res.code) {
         case 1001:
@@ -86,6 +101,11 @@ request.interceptors.response.use(
     }
   },
   (error) => {
+    // 如果请求配置了skipErrorHandler，则不进行错误处理
+    if (error.config && error.config.skipErrorHandler) {
+      return Promise.reject(error);
+    }
+    
     // 处理网络错误
     if (error.response) {
       // 请求已发出，但服务器响应状态码不在 2xx 范围内

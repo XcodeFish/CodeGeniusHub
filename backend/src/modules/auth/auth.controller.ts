@@ -10,6 +10,7 @@ import {
   HttpStatus,
   UnauthorizedException,
   HttpException,
+  Logger,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -33,6 +34,8 @@ import { AUTH_ERROR } from '../../common/constants/auth-error-codes';
 @Controller('auth')
 @ApiTags('认证模块')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly jwtService: JwtService,
@@ -106,17 +109,51 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponseDto> {
-    // Service 中会处理设置 httpOnly cookie 的逻辑，需要传入 response 对象
-    const { accessToken, user } = await this.authService.login(
-      loginDto,
-      response,
-    );
-    return {
-      code: 0,
-      message: '登录成功',
-      accessToken,
-      user,
-    };
+    try {
+      this.logger.log(
+        `收到登录请求 - 用户标识: ${loginDto.identifier}, 验证码ID: ${loginDto.captchaId}`,
+      );
+
+      // 屏蔽密码和验证码，不记录到日志中
+      const logSafeLoginDto = {
+        ...loginDto,
+        password: '******',
+        captchaCode: '******',
+      };
+      this.logger.log(`登录参数: ${JSON.stringify(logSafeLoginDto)}`);
+
+      // Service 中会处理设置 httpOnly cookie 的逻辑，需要传入 response 对象
+      const loginResult = await this.authService.login(loginDto, response);
+
+      this.logger.log(
+        `登录服务返回结果: ${JSON.stringify({
+          code: loginResult.code,
+          message: loginResult.message,
+          accessToken: loginResult.accessToken
+            ? `${loginResult.accessToken.substring(0, 15)}...`
+            : undefined,
+          user: loginResult.user
+            ? {
+                id: loginResult.user.id,
+                username: loginResult.user.username,
+                permission: loginResult.user.permission,
+              }
+            : undefined,
+        })}`,
+      );
+
+      this.logger.log(`登录响应生成成功 - 用户ID: ${loginResult.user.id}`);
+
+      return {
+        code: 0,
+        message: '登录成功',
+        accessToken: loginResult.accessToken,
+        user: loginResult.user,
+      };
+    } catch (error) {
+      this.logger.error(`登录控制器捕获到异常: ${error.message}`, error.stack);
+      throw error; // 继续抛出异常，让全局异常过滤器处理
+    }
   }
 
   /**
@@ -195,35 +232,53 @@ export class AuthController {
    * 自动登录/刷新Token
    */
   @Get('refresh')
+  @Public()
   @ApiOperation({ summary: '刷新Token' })
   @ApiResponse({
     status: 200,
     description: 'Token刷新成功',
     type: RefreshTokenResponseDto,
   })
-  @ApiResponse({ status: 401, description: 'Refresh token not found' })
+  @ApiResponse({ status: 401, description: 'Token无效或已过期' })
   @HttpCode(HttpStatus.OK)
   async refreshToken(
     @Request() req,
     @Res({ passthrough: true }) response: Response,
   ): Promise<RefreshTokenResponseDto> {
-    // 这里的逻辑需要从 cookie 或请求头中获取 refresh token
-    // 然后调用 authService.refreshToken 方法来生成新的 access token
-    // 这个例子简化处理，直接返回一个新的 access token (实际需要复杂逻辑)
+    // 尝试从cookie获取refreshToken
+    let token = req.cookies?.refreshToken;
 
-    // 从请求中获取旧的 refresh token (通常在 httpOnly cookie 中)
-    const oldRefreshToken = req.cookies?.refreshToken;
+    // 如果cookie中没有refreshToken，则尝试从Authorization头中获取token
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+        this.logger.log('从Authorization头获取token进行刷新');
+      }
+    }
 
-    if (!oldRefreshToken) {
+    if (!token) {
+      this.logger.warn('刷新Token失败: 未找到token');
       throw new UnauthorizedException(AUTH_ERROR.REFRESH_TOKEN_NOT_FOUND);
     }
 
-    const { accessToken } = await this.authService.refreshToken(
-      oldRefreshToken,
-      response,
-    );
+    try {
+      this.logger.log('开始刷新token...');
+      const { accessToken } = await this.authService.refreshToken(
+        token,
+        response,
+      );
+      this.logger.log('Token刷新成功');
 
-    return { code: 0, message: 'Token 刷新成功', accessToken };
+      return {
+        code: 0,
+        message: 'Token刷新成功',
+        accessToken,
+      };
+    } catch (error) {
+      this.logger.error(`刷新Token失败: ${error.message}`);
+      throw error;
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
-
 const API_CONFIG = {
-  // 开发环境API地址
-  development: 'http://localhost:9000/api',
+  // 开发环境API地址 - 使用相对路径，由Next.js代理转发到后端9000端口
+  // 这样浏览器请求会发送到Next.js服务器（通常是3000端口），然后由Next.js转发到9000端口
+  development: '/api',
   // 测试环境API地址
   test: 'https://test-api.codegeniushub.com/api',
   // 生产环境API地址

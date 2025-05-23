@@ -1,17 +1,33 @@
 // 登录参数类型
 export interface LoginParams {
-  email: string;
+  identifier: string;
   password: string;
   remember: boolean;
   captchaId: string;
   captchaCode: string;
 }
 
+// 登录响应内部数据类型
+export interface LoginResponseData {
+  accessToken: string;
+  refreshToken?: string;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    phone: string;
+    permission: string;
+    firstLogin?: boolean;
+    createdAt?: Date;
+    updatedAt?: Date;
+  };
+}
+
 // 登录响应类型
 export interface LoginResponse {
-  token: string;
-  userId: string;
-  permission: string;
+  code: number;
+  message: string;
+  data: LoginResponseData;
 }
 
 // 注册参数类型

@@ -21,7 +21,7 @@ const mapRoleToStoreRole = (role: string): 'admin' | 'editor' | 'viewer' => {
 // 将UserProfile映射为User的函数
 const mapUserProfileToUser = (profile: UserProfile): User => {
   return {
-    id: profile.userId,
+    id: profile.id,
     username: profile.username,
     email: profile.email,
     permission: profile.permission,
@@ -103,25 +103,62 @@ export function useAuth() {
     try {
       setLoading(true);
       const loginParams: LoginParams = {
-        ...params,
-        captchaId
+        identifier: params.identifier,
+        password: params.password,
+        remember: params.remember,
+        captchaId,
+        captchaCode: params.captchaCode
       };
+      
+      console.log('登录参数:', loginParams); // 添加日志，便于排查问题
+      
       const res = await authService.login(loginParams);
+      console.log('登录成功:', res);
       
-      // 登录成功后保存token和用户信息
-      localStorage.setItem('token', res.token);
+      // 检查响应结构
+      if (!res.data) {
+        console.error('登录响应缺少data字段:', res);
+        throw new Error('登录响应格式错误');
+      }
+
+      // 从res.data中获取数据
+      const { accessToken, user } = res.data;
+      console.log('accessToken:', accessToken);
+      console.log('user:', user);
       
-      // 获取用户详细信息
-      const userInfo = await authService.getCurrentUser();
+      // 确保accessToken存在再保存
+      if (accessToken) {
+        // 登录成功后保存token和用户信息
+        localStorage.setItem('token', accessToken);
+      } else {
+        console.error('登录响应中缺少accessToken');
+        throw new Error('登录响应中缺少accessToken');
+      }
       
-      // 更新全局状态 - 使用映射函数处理属性差异
-      const mappedUser = mapUserProfileToUser(userInfo);
-      setUser(mappedUser, res.token, mapRoleToStoreRole(userInfo.permission), false);
+      // 使用用户信息
+      if (user) {
+        // 更新全局状态 - 使用映射函数处理差异
+        const mappedUser = mapUserProfileToUser(user as unknown as UserProfile);
+        setUser(mappedUser, accessToken, mapRoleToStoreRole(user.permission), false);
+      } else {
+        console.error('登录响应中缺少用户信息');
+        throw new Error('登录响应中缺少用户信息');
+      }
       
       messageUtil.success('登录成功');
       return res;
-    } catch (error) {
+    } catch (error: any) {
       console.error('登录失败:', error);
+      
+      // 更详细地记录错误信息
+      if (error.response) {
+        console.error('服务器响应:', error.response.status, error.response.data);
+      } else if (error.request) {
+        console.error('请求已发送但未收到响应:', error.request);
+      } else {
+        console.error('请求配置出错:', error.message);
+      }
+      
       // 登录失败后重新获取验证码
       getCaptcha();
       throw error;
@@ -167,23 +204,49 @@ export function useAuth() {
   const autoLogin = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) return false;
+      if (!token) {
+        console.log('本地不存在token，无法进行自动登录');
+        return false;
+      }
 
       setLoading(true);
+      console.log('开始自动登录，刷新token...');
+      
       // 刷新token
       const res = await authService.refreshToken();
-      localStorage.setItem('token', res.token);
+      console.log('刷新token成功，获取新的accessToken:', res.accessToken);
       
-      // 获取用户信息
-      const userInfo = await authService.getCurrentUser();
+      // 保存新的accessToken
+      localStorage.setItem('token', res.accessToken);
       
-      // 更新全局状态 - 使用映射函数处理属性差异
-      const mappedUser = mapUserProfileToUser(userInfo);
-      setUser(mappedUser, res.token, mapRoleToStoreRole(userInfo.permission), false);
+      try {
+        // 获取用户信息
+        const userInfo = await authService.getCurrentUser();
+        console.log('获取用户信息成功:', userInfo);
+        
+        // 更新全局状态 - 使用正确的字段处理
+        const mappedUser = mapUserProfileToUser(userInfo);
+        setUser(mappedUser, res.accessToken, mapRoleToStoreRole(userInfo.permission), false);
+        
+        return true;
+      } catch (userError: any) {
+        console.error('获取用户信息失败:', userError);
+        // 虽然获取用户信息失败，但token已经刷新成功，不应该清除token
+        throw userError;
+      }
+    } catch (error: any) {
+      console.error('自动登录失败，详细错误:', error);
       
-      return true;
-    } catch (error) {
-      console.error('自动登录失败:', error);
+      // 更详细地记录错误信息
+      if (error.response) {
+        console.error('服务器响应:', error.response.status, error.response.data);
+      } else if (error.request) {
+        console.error('请求已发送但未收到响应:', error.request);
+      } else {
+        console.error('请求配置出错:', error.message);
+      }
+      
+      // 清除无效的token
       localStorage.removeItem('token');
       return false;
     } finally {

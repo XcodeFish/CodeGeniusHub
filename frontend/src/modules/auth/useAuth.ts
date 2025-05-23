@@ -35,6 +35,9 @@ export function useAuth() {
   const [captchaImg, setCaptchaImg] = useState('');
   const [captchaId, setCaptchaId] = useState('');
 
+  // 添加一个ref来跟踪是否正在执行
+  const loadingRef = useRef(false);
+
   // 获取验证码
   const getCaptcha = useCallback(async () => {
     try {
@@ -162,6 +165,16 @@ export function useAuth() {
 
   // 自动登录（检查token有效性并在需要时刷新）
   const autoLogin = useCallback(async () => {
+
+    // 如果已经在执行中，直接返回
+    if (loadingRef.current) {
+      console.log('自动登录已在进行中，跳过重复执行');
+      return false;
+    }
+
+    // 标记开始执行
+    loadingRef.current = true;
+
     try {
       // 检查localStorage中是否存在token
       const token = getToken();
@@ -220,6 +233,7 @@ export function useAuth() {
           return false;
         } finally {
           setLoading(false);
+          loadingRef.current = false;
         }
       }
       

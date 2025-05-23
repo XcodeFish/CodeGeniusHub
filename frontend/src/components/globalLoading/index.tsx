@@ -1,5 +1,4 @@
 import React from 'react';
-import { Spin } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
 import { create } from 'zustand';
 import styles from './GlobalLoading.module.scss';
@@ -27,11 +26,13 @@ const GlobalLoading: React.FC = () => {
   return (
     <div className={styles.loadingContainer}>
       <div className={styles.loadingContent}>
-        <Spin 
-          indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} 
-          tip={message}
-          fullscreen
-        />
+        <LoadingOutlined className={styles.icon} spin />
+        <div className={styles.message}>
+          {message}
+          <span className={styles.dot}></span>
+          <span className={styles.dot}></span>
+          <span className={styles.dot}></span>
+        </div>
       </div>
     </div>
   );

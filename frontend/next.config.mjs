@@ -6,9 +6,9 @@ const nextConfig = {
     includePaths: ['./src/styles'],
   },
   // 禁用webpack5某些功能以解决HMR问题
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     // 修复HMR问题
-    if (!isServer) {
+    if (dev && !isServer) {
       config.optimization.runtimeChunk = 'single';
     }
     return config;

@@ -10,6 +10,7 @@ import {
   IsArray,
   ValidateNested,
   IsNumber,
+  Length,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Module } from '../schemas/user.schema';
@@ -204,4 +205,20 @@ export class UserResponseDto {
 
     return userObj as UserResponseDto;
   }
+}
+
+/**
+ * 用户修改密码字段定义
+ */
+export class ChangePasswordDto {
+  @ApiProperty({ description: '旧密码' })
+  @IsString()
+  @IsNotEmpty({ message: '旧密码不能为空' })
+  oldPassword: string;
+
+  @ApiProperty({ description: '新密码' })
+  @IsNotEmpty({ message: '新密码不能为空' })
+  @IsString({ message: '新密码必须是字符串' })
+  @Length(6, 12, { message: '新密码长度必须在6到12位之间' })
+  newPassword: string;
 }

@@ -14,9 +14,12 @@ import {
   HttpStatus,
   HttpException,
   Put,
+  Req,
   Query,
   HttpCode,
+  BadRequestException,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'; // 假设存在用于HTTP的JwtAuthGuard
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -27,6 +30,7 @@ import {
   CreateUserDto,
   UpdateUserModulesDto,
   UserResponseDto,
+  ChangePasswordDto,
 } from './dto/user.dto'; // 引入UserResponseDto
 import { User, UserDocument, Module } from './schemas/user.schema'; // 引入User Schema
 import {
@@ -49,6 +53,7 @@ class BatchUpdatePermissionsDto {
 @Controller('user') // 定义基础路由 /user
 @ApiTags('用户模块')
 @UseGuards(JwtAuthGuard, RolesGuard) // 同时应用 JwtAuthGuard 和 RolesGuard
+@ApiBearerAuth()
 export class UserController {
   constructor(
     private readonly userService: UserService,
@@ -224,6 +229,7 @@ export class UserController {
   @ApiResponse({ status: 400, description: '参数校验失败' })
   @ApiResponse({ status: 500, description: '服务器错误' })
   @UseGuards() // 取消全局守卫，允许未登录用户注册
+  @ApiBearerAuth()
   async register(
     @Body() createUserDto: CreateUserDto,
   ): Promise<UserResponseDto> {
@@ -306,6 +312,7 @@ export class UserController {
    */
   @Post('batch-project-permissions')
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
   @Roles(Permission.ADMIN) // 系统管理员或项目管理员可操作
   @ApiOperation({ summary: '批量更新项目权限' })
   @ApiBody({ type: BatchUpdatePermissionsDto })
@@ -509,6 +516,7 @@ export class UserController {
    */
   @Get(':userId/permission-logs')
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
   @Roles(Permission.ADMIN) // 只有系统管理员可以查看权限日志
   @ApiOperation({ summary: '获取用户权限变更日志' })
   @ApiResponse({
@@ -576,5 +584,39 @@ export class UserController {
         USER_ERROR.INTERNAL || '服务器内部错误',
       );
     }
+  }
+
+  /**
+   * 修改用户密码
+   * @param userId 用户ID
+   * @param changePasswordDto 修改密码数据
+   * @returns 成功或失败信息
+   */
+  @Put('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '修改当前用户密码' })
+  @ApiResponse({ status: 200, description: '密码修改成功' })
+  @ApiResponse({ status: 400, description: '请求参数错误' })
+  @ApiResponse({ status: 401, description: '未授权' })
+  async changePassword(
+    @Body() changePasswordDto: ChangePasswordDto,
+    @Req() req: any,
+  ) {
+    const userId = req.user.userId || req.user.id; // 根据您的JWT payload结构调整
+
+    // 明确定义返回类型
+    const result = await this.userService.changePassword(
+      userId,
+      changePasswordDto,
+    );
+    if (!result) {
+      throw new BadRequestException('修改密码过程中发生错误');
+    }
+
+    return {
+      code: 0,
+      message: '密码修改成功',
+    };
   }
 }

@@ -28,7 +28,13 @@ import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { Public } from '../../common/decorators/public.decorator';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AUTH_ERROR } from '../../common/constants/auth-error-codes';
 
 @Controller('auth')
@@ -160,6 +166,7 @@ export class AuthController {
    * 用户登出
    */
   @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   @Post('logout')
   @ApiOperation({ summary: '用户登出' })
   @ApiResponse({
@@ -285,6 +292,7 @@ export class AuthController {
    * 获取当前用户信息
    */
   @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   @Get('me')
   @ApiOperation({ summary: '获取当前用户信息' })
   @ApiResponse({ status: 200, description: '获取成功，返回用户信息' })

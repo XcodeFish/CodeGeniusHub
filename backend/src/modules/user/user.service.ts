@@ -10,6 +10,7 @@ import {
   CreateUserDto,
   UpdateUserDto,
   UpdateUserModulesDto,
+  ChangePasswordDto,
 } from './dto/user.dto';
 import * as bcrypt from 'bcrypt'; // 引入bcrypt用于密码哈希
 import { isValidObjectId } from 'mongoose';
@@ -198,5 +199,41 @@ export class UserService {
 
     const user = await this.userModel.findById(userId).exec();
     return user?.modules || [];
+  }
+
+  /**
+   * 修改用户密码
+   * @param userId 用户ID
+   * @param changePasswordDto 修改密码数据
+   * @returns 成功或失败信息
+   */
+  async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
+    const { oldPassword, newPassword } = changePasswordDto;
+
+    // 检查用户ID格式
+    if (!isValidObjectId(userId)) {
+      return { success: false, message: '用户ID格式不正确' };
+    }
+
+    // 查找用户
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      return { success: false, message: '用户不存在' };
+    }
+
+    // 验证旧密码
+    const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
+    if (!isPasswordValid) {
+      return { success: false, message: '旧密码不正确' };
+    }
+
+    // 确保新密码与旧密码不同
+    if (oldPassword === newPassword) {
+      return { success: false, message: '新密码不能与旧密码相同' };
+    }
+
+    // 直接设置新密码，pre-save hook会自动处理加密
+    user.password = newPassword;
+    await user.save();
   }
 }

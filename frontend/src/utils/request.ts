@@ -201,6 +201,22 @@ const http = {
     });
   },
 
+  // PATCH请求
+  patch: <T = any>(url: string, data?: any, options?: RequestOptions): Promise<T> => {
+    return request({
+      method: 'PATCH',
+      url,
+      data,
+      ...options
+    }).then((res: any) => {
+      if (options?.showSuccessMessage) {
+        message.success(options.successMessage || res.message || '操作成功');
+      }
+      return res;
+    });
+  },
+
+
   // DELETE请求
   delete: <T = any>(url: string, data?: any, options?: RequestOptions): Promise<T> => {
     return request({

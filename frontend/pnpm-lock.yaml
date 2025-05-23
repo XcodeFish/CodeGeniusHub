@@ -29,6 +29,9 @@ importers:
       axios:
         specifier: ^1.9.0
         version: 1.9.0
+      jwt-decode:
+        specifier: ^4.0.0
+        version: 4.0.0
       monaco-editor:
         specifier: ^0.52.2
         version: 0.52.2
@@ -637,6 +640,10 @@ packages:
 
   json2mq@0.2.0:
     resolution: {integrity: sha512-SzoRg7ux5DWTII9J2qkrZrqV1gt+rTaoufMxEzXbS26Uid0NwaJd123HcoB80TgubEppxxIGdNxCx50fEoEWQA==}
+
+  jwt-decode@4.0.0:
+    resolution: {integrity: sha512-+KJGIyHgkGuIq3IEBNftfhW/LfWhXUIY6OmyVWjliu5KH1y0fw7VQ8YndE2O4qZdMSd9SqbnC8GOcZEy0Om7sA==}
+    engines: {node: '>=18'}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -1656,6 +1663,8 @@ snapshots:
   json2mq@0.2.0:
     dependencies:
       string-convert: 0.2.1
+
+  jwt-decode@4.0.0: {}
 
   math-intrinsics@1.1.0: {}
 

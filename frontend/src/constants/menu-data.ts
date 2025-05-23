@@ -76,7 +76,7 @@ export const defaultMenus: Record<string, MenuItem[]> = {
       moduleId: 'version',
       moduleName: '版本管理',
       modulePath: '/version',
-      moduleIcon: 'Branch',
+      moduleIcon: 'HistoryOutlined',
       moduleOrder: 5,
       children: []
     },

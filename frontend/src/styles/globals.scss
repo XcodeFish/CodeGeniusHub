@@ -43,7 +43,7 @@ a {
   color: vars.$primary-color;
   text-decoration: none;
   transition: color 0.2s;
-  
+
   &:hover {
     color: color.adjust(vars.$primary-color, $lightness: 10%);
   }

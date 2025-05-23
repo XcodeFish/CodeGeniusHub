@@ -8,6 +8,8 @@ import styles from '@/styles/Login.module.scss';
 import { svgToDataUri } from '@/utils/svg-util';
 import messageUtil from '@/utils/message-util';
 import { useMenu } from '@/hooks/useMenu';
+import { getToken } from '@/utils/token-util';
+import { useUserStore } from '@/stores/userStore';
 
 /**
  * 登录表单组件
@@ -15,23 +17,45 @@ import { useMenu } from '@/hooks/useMenu';
 const LoginForm: React.FC = () => {
   const [form] = Form.useForm();
   const router = useRouter();
-  const { loading, captchaImg, getCaptcha, login, captchaTimeLeft } = useAuth();
+  const { loading, captchaImg, getCaptcha, login } = useAuth();
   const [remember, setRemember] = useState(false);
   const { fetchMenus } = useMenu();
+  const [shouldGetCaptcha, setShouldGetCaptcha] = useState(false);
 
-  // 组件挂载时获取验证码
+  // 延迟检查登录状态并决定是否获取验证码
   useEffect(() => {
-    getCaptcha();
-  }, [getCaptcha]);
+    // 设置一个检查函数
+    const checkAuthStatus = () => {
+      const token = getToken();
+      const user = useUserStore.getState().user;
+      
+      // 如果没有token或用户信息不存在，标记需要获取验证码
+      if (!token || !user || !user.id) {
+        console.log('未检测到有效登录状态，需要获取验证码');
+        setShouldGetCaptcha(true);
+      } else {
+        console.log('检测到有效登录状态，不需要获取验证码');
+        router.replace('/dashboard'); // 如果有登录状态，直接重定向到仪表盘
+      }
+    };
+    
+    // 延迟执行检查，给autoLogin足够的时间完成
+    const timer = setTimeout(checkAuthStatus, 800);
+    
+    // 清理函数
+    return () => clearTimeout(timer);
+  }, [router]);
+
+  // 当shouldGetCaptcha状态变为true时，获取验证码
+  useEffect(() => {
+    if (shouldGetCaptcha) {
+      getCaptcha();
+    }
+  }, [shouldGetCaptcha, getCaptcha]);
 
   // 刷新验证码
   const refreshCaptcha = () => {
-    if (loading || captchaTimeLeft > 0) {
-      if (captchaTimeLeft > 0) {
-        messageUtil.warning(`操作过于频繁，请${captchaTimeLeft}秒后再试`);
-      }
-      return;
-    }
+    if (loading) return;
     
     getCaptcha().catch(err => {
       // 错误已由请求拦截器统一处理，这里不需要额外处理
@@ -51,7 +75,7 @@ const LoginForm: React.FC = () => {
 
       // 登录成功后立即获取菜单数据
       await fetchMenus();
-      
+
       messageUtil.success('登录成功');
       
       // 立即跳转到首页，不等待其他请求完成
@@ -65,7 +89,7 @@ const LoginForm: React.FC = () => {
 
   // 计算验证码按钮样式
   const captchaButtonStyle = {
-    cursor: captchaTimeLeft > 0 || loading ? 'not-allowed' : 'pointer',
+    cursor: loading ? 'not-allowed' : 'pointer',
     position: 'relative' as const
   };
 
@@ -160,15 +184,10 @@ const LoginForm: React.FC = () => {
                       alt="验证码" 
                       className={styles.captchaImg}
                     />
-                    {captchaTimeLeft > 0 && (
-                      <div className={styles.captchaCountdown}>
-                        {captchaTimeLeft}s
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div>
-                    {captchaTimeLeft > 0 ? `${captchaTimeLeft}秒后可重试` : '点击获取验证码'}
+                    {loading ? '加载中...' : '点击获取验证码'}
                   </div>
                 )}
               </div>
@@ -218,4 +237,4 @@ const LoginForm: React.FC = () => {
   );
 };
 
-export default LoginForm; 
+export default LoginForm;

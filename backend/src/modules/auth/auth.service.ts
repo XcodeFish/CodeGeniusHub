@@ -476,27 +476,49 @@ export class AuthService {
     response?: Response,
   ): Promise<{ accessToken: string }> {
     try {
-      // 验证 refresh token 的签名和过期时间
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: jwtConstants.secret,
-        // 刷新 token 的 secret 和过期时间可能与 access token 不同，根据实际配置调整
-      });
+      this.logger.log('开始刷新令牌过程');
 
-      // 查找用户并验证数据库中存储的 refresh token hash
-      const user = await this.userModel.findById(payload.sub).exec();
-      if (!user || !user.currentRefreshTokenHash) {
-        throw new UnauthorizedException('Refresh token 无效或用户不存在');
+      // 验证 refresh token 的签名和过期时间
+      this.logger.log('验证refresh token的签名和过期时间...');
+      let payload;
+      try {
+        payload = this.jwtService.verify(refreshToken, {
+          secret: jwtConstants.secret,
+          // 刷新 token 的 secret 和过期时间可能与 access token 不同，根据实际配置调整
+        });
+        this.logger.log(`refresh token验证成功，用户ID: ${payload.sub}`);
+      } catch (jwtError) {
+        this.logger.error(`JWT验证失败: ${jwtError.message}`);
+        throw new UnauthorizedException('Refresh token 签名无效或已过期');
       }
 
+      // 查找用户并验证数据库中存储的 refresh token hash
+      this.logger.log(`根据ID查找用户: ${payload.sub}`);
+      const user = await this.userModel.findById(payload.sub).exec();
+
+      if (!user) {
+        this.logger.warn(`找不到用户: ${payload.sub}`);
+        throw new UnauthorizedException('用户不存在');
+      }
+
+      if (!user.currentRefreshTokenHash) {
+        this.logger.warn(`用户没有存储的refresh token hash: ${payload.sub}`);
+        throw new UnauthorizedException('Refresh token已失效，请重新登录');
+      }
+
+      this.logger.log('验证refresh token与数据库存储的hash是否匹配');
       const isRefreshTokenMatch = await bcrypt.compare(
         refreshToken,
         user.currentRefreshTokenHash,
       );
+
       if (!isRefreshTokenMatch) {
+        this.logger.warn(`Refresh token不匹配: ${payload.sub}`);
         throw new UnauthorizedException('Refresh token 不匹配');
       }
 
       // 生成新的 access token
+      this.logger.log('生成新的access token');
       const newAccessToken = this.jwtService.sign(
         {
           sub: user._id.toString(),
@@ -508,12 +530,12 @@ export class AuthService {
         },
       );
 
-      // 可选：实现 refresh token 滑动窗口，生成新的 refresh token 并更新数据库和 cookie
-      // 例如：每使用一次 refresh token 就生成一个新的，旧的作废
-
+      this.logger.log(
+        `成功生成新的access token: ${newAccessToken.substring(0, 15)}...`,
+      );
       return { accessToken: newAccessToken };
     } catch (e) {
-      console.error('Refresh Token Error:', e.message);
+      this.logger.error(`刷新Token失败: ${e.message}`, e.stack);
       // 清除可能存在的无效 refresh token cookie
       if (response) {
         response.clearCookie(jwtConstants.refreshTokenCookieName, {
@@ -521,7 +543,7 @@ export class AuthService {
           secure: process.env.NODE_ENV === 'production',
         });
       }
-      throw new UnauthorizedException('Refresh token 无效或已过期');
+      throw e; // 保留原始错误以便更好地调试
     }
   }
 

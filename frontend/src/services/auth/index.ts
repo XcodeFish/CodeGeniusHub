@@ -46,7 +46,8 @@ const authService = {
     // 不再从localStorage获取token，因为refresh token应该在cookie中
     return http.get<ResponseData<{ accessToken: string }>>('/auth/refresh', undefined, {
       withCredentials: true, // 确保携带cookie
-      skipErrorHandler: true // 自己处理错误，不要全局处理
+      skipErrorHandler: true, // 自己处理错误，不要全局处理
+      timeout: 60000 // 为刷新token单独设置60秒超时时间
     }).then(res => {
       console.log('刷新token响应:', res);
       return res.data!;

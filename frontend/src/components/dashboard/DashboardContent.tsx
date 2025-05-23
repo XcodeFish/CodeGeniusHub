@@ -29,7 +29,7 @@ const DashboardContent: React.FC = () => {
         <Paragraph className={styles.welcomeText}>AI智能代码生成与协作平台，让编程更高效、协作更简单</Paragraph>
         <div className={styles.actionButtons}>
           <Button type="primary" size="large">创建新项目</Button>
-          <Button size="large">探索示例</Button>
+          <Button type="primary" size="large">探索示例</Button>
         </div>
       </div>
       

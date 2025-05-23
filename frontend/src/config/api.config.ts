@@ -16,5 +16,5 @@ export const getBaseUrl = () => {
 
 export default {
   baseUrl: getBaseUrl(),
-  timeout: 10000, // 请求超时时间
+  timeout: 30000, // 请求超时时间
 };

@@ -6,10 +6,7 @@ import { UserProfile, User } from '@/types/user';
 import authService from '@/services/auth';
 import { AxiosError } from 'axios';
 import messageUtil from '@/utils/message-util';
-import { checkRateLimit, recordRequest } from '@/utils/rate-limiter-util';
-
-// 验证码请求的唯一标识
-const CAPTCHA_REQUEST_KEY = 'auth_captcha_request';
+import { saveTokenInfo, clearTokenInfo, getToken, isTokenExpiredOrExpiring, isTokenRemembered } from '@/utils/token-util';
 
 // 类型转换工具函数
 const mapRoleToStoreRole = (role: string): 'admin' | 'editor' | 'viewer' => {
@@ -37,49 +34,12 @@ export function useAuth() {
   const [loading, setLoading] = useState(false);
   const [captchaImg, setCaptchaImg] = useState('');
   const [captchaId, setCaptchaId] = useState('');
-  const [captchaTimeLeft, setCaptchaTimeLeft] = useState(0); // 存储验证码剩余冷却时间
 
   // 获取验证码
   const getCaptcha = useCallback(async () => {
-    // 先检查前端频率限制
-    if (captchaTimeLeft > 0) {
-      messageUtil.warning(`操作过于频繁，请${captchaTimeLeft}秒后再试`);
-      return {
-        captchaImg: '',
-        captchaId: ''
-      };
-    }
-
-    // 检查频率限制
-    const checkResult = checkRateLimit(CAPTCHA_REQUEST_KEY);
-    if (!checkResult.allowed) {
-      // 更新剩余时间状态
-      setCaptchaTimeLeft(checkResult.timeLeft);
-      
-      // 启动倒计时
-      const timer = setInterval(() => {
-        setCaptchaTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      
-      messageUtil.warning(checkResult.message);
-      return {
-        captchaImg: '',
-        captchaId: ''
-      };
-    }
-    
     try {
       setLoading(true);
       const res = await authService.getCaptcha();
-      
-      // 请求成功后记录时间，用于前端频率控制
-      recordRequest(CAPTCHA_REQUEST_KEY);
       
       setCaptchaImg(res.captchaImg);
       setCaptchaId(res.captchaId);
@@ -96,7 +56,7 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
-  }, [captchaTimeLeft]);
+  }, []);
 
   // 登录
   const login = useCallback(async (params: Omit<LoginParams, 'captchaId'> & { captchaCode: string }) => {
@@ -128,8 +88,8 @@ export function useAuth() {
       
       // 确保accessToken存在再保存
       if (accessToken) {
-        // 登录成功后保存token和用户信息
-        localStorage.setItem('token', accessToken);
+        // 登录成功后保存token和相关信息
+        saveTokenInfo(accessToken, params.remember || false);
       } else {
         console.error('登录响应中缺少accessToken');
         throw new Error('登录响应中缺少accessToken');
@@ -139,7 +99,7 @@ export function useAuth() {
       if (user) {
         // 更新全局状态 - 使用映射函数处理差异
         const mappedUser = mapUserProfileToUser(user as unknown as UserProfile);
-        setUser(mappedUser, accessToken, mapRoleToStoreRole(user.permission), false);
+        setUser(mappedUser, accessToken, mapRoleToStoreRole(user.permission), params.remember || false);
       } else {
         console.error('登录响应中缺少用户信息');
         throw new Error('登录响应中缺少用户信息');
@@ -187,70 +147,120 @@ export function useAuth() {
     try {
       setLoading(true);
       await authService.logout();
-      localStorage.removeItem('token');
+      clearTokenInfo();
       storeLogout();
       message.success('退出成功');
     } catch (error) {
       console.error('退出失败:', error);
       // 即使退出接口报错，也要清除本地登录状态
-      localStorage.removeItem('token');
+      clearTokenInfo();
       storeLogout();
     } finally {
       setLoading(false);
     }
   }, [storeLogout]);
 
-  // 自动登录（刷新token）
+  // 自动登录（检查token有效性并在需要时刷新）
   const autoLogin = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.log('本地不存在token，无法进行自动登录');
         return false;
       }
 
-      setLoading(true);
-      console.log('开始自动登录，刷新token...');
+      // 检查token是否过期或即将过期
+      const tokenExpiring = isTokenExpiredOrExpiring();
+      const isRemembered = isTokenRemembered();
       
-      // 刷新token
-      const res = await authService.refreshToken();
-      console.log('刷新token成功，获取新的accessToken:', res.accessToken);
-      
-      // 保存新的accessToken
-      localStorage.setItem('token', res.accessToken);
-      
-      try {
-        // 获取用户信息
-        const userInfo = await authService.getCurrentUser();
-        console.log('获取用户信息成功:', userInfo);
+      console.log(
+        `自动登录检查 - Token${tokenExpiring ? '已过期或即将过期' : '有效'}, ${
+          isRemembered ? '记住用户' : '未记住用户'
+        }`
+      );
+
+      // 如果token有效且不是即将过期，直接使用已有信息
+      if (!tokenExpiring) {
+        console.log('token有效且未接近过期，使用现有登录状态');
         
-        // 更新全局状态 - 使用正确的字段处理
-        const mappedUser = mapUserProfileToUser(userInfo);
-        setUser(mappedUser, res.accessToken, mapRoleToStoreRole(userInfo.permission), false);
+        // 如果用户信息在store中，则无需任何操作，直接返回成功
+        const currentUser = useUserStore.getState().user;
+        if (currentUser && currentUser.id) {
+          console.log('用户信息已存在，无需自动登录');
+          return true;
+        }
         
-        return true;
-      } catch (userError: any) {
-        console.error('获取用户信息失败:', userError);
-        // 虽然获取用户信息失败，但token已经刷新成功，不应该清除token
-        throw userError;
+        // 如果store中没有用户信息但token有效，则静默获取用户信息
+        try {
+          setLoading(true);
+          const userInfo = await authService.getCurrentUser();
+          const mappedUser = mapUserProfileToUser(userInfo);
+          setUser(mappedUser, token, mapRoleToStoreRole(userInfo.permission), isRemembered);
+          return true;
+        } catch (error: any) {
+          console.error('获取用户信息失败:', error);
+          
+          // 如果是401错误，表示token实际已失效
+          if (error.response && error.response.status === 401) {
+            clearTokenInfo();
+            messageUtil.warning('登录已失效，请重新登录');
+            return false;
+          }
+          
+          throw error;
+        } finally {
+          setLoading(false);
+        }
       }
-    } catch (error: any) {
-      console.error('自动登录失败，详细错误:', error);
       
-      // 更详细地记录错误信息
-      if (error.response) {
-        console.error('服务器响应:', error.response.status, error.response.data);
-      } else if (error.request) {
-        console.error('请求已发送但未收到响应:', error.request);
-      } else {
-        console.error('请求配置出错:', error.message);
+      // 如果token已过期或即将过期，且是"记住我"用户，尝试刷新token
+      if (isRemembered && tokenExpiring) {
+        try {
+          setLoading(true);
+          console.log('token即将过期且已记住用户，尝试刷新token...');
+          const res = await authService.refreshToken();
+          
+          // 保存新的accessToken和相关信息
+          saveTokenInfo(res.accessToken, true);
+          
+          // 获取用户信息
+          const userInfo = await authService.getCurrentUser();
+          
+          // 更新全局状态
+          const mappedUser = mapUserProfileToUser(userInfo);
+          setUser(mappedUser, res.accessToken, mapRoleToStoreRole(userInfo.permission), true);
+          
+          return true;
+        } catch (error: any) {
+          console.error('刷新Token失败:', error);
+          
+          // 处理超时或其他错误
+          if (error.message && error.message.includes('timeout')) {
+            messageUtil.warning('自动登录失败，请手动登录');
+          } else if (error.response && error.response.status === 401) {
+            messageUtil.warning('登录已过期，请重新登录');
+          }
+          
+          // 清除所有token相关信息
+          clearTokenInfo();
+          
+          return false;
+        } finally {
+          setLoading(false);
+        }
+      } else if (tokenExpiring) {
+        // 未勾选"记住我"且token过期，提示重新登录
+        console.log('token已过期且未勾选"记住我"，需要重新登录');
+        clearTokenInfo();
+        messageUtil.warning('登录已过期，请重新登录');
+        return false;
       }
       
-      // 清除无效的token
-      localStorage.removeItem('token');
       return false;
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      console.error('自动登录过程出现未处理的错误:', error);
+      clearTokenInfo();
+      return false;
     }
   }, [setUser]);
 
@@ -286,13 +296,12 @@ export function useAuth() {
     loading,
     captchaImg,
     captchaId,
-    captchaTimeLeft, // 导出剩余时间，供UI组件使用
-    getCaptcha,
     login,
     register,
     logout,
     autoLogin,
+    getCaptcha,
     forgotPassword,
     resetPassword
   };
-} 
+}

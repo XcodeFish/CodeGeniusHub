@@ -29,6 +29,9 @@ importers:
       axios:
         specifier: ^1.9.0
         version: 1.9.0
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.13
       jwt-decode:
         specifier: ^4.0.0
         version: 4.0.0

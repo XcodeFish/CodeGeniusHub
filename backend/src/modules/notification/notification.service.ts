@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
@@ -23,6 +23,8 @@ import { Cron } from '@nestjs/schedule';
 })
 export class NotificationService {
   @WebSocketServer() server: Server;
+  private readonly logger = new Logger(NotificationService.name);
+  private readonly maxRetries = 3; // 最大重试次数
 
   constructor(
     @InjectModel(Notification.name)
@@ -30,6 +32,36 @@ export class NotificationService {
     @InjectModel(NotificationSettings.name)
     private notificationSettingsModel: Model<NotificationSettingsDocument>,
   ) {}
+
+  /**
+   * 带重试的数据库操作包装器
+   * @param operation 数据库操作函数
+   * @param maxRetries 最大重试次数
+   * @returns 操作结果
+   */
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries = this.maxRetries,
+  ): Promise<T> {
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(
+          `数据库操作失败(尝试 ${attempt}/${maxRetries}): ${error.message}`,
+        );
+
+        // 如果不是最后一次尝试，则等待一段时间再重试
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 100; // 指数退避策略
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+    throw lastError;
+  }
 
   /**
    * 创建通知
@@ -127,20 +159,33 @@ export class NotificationService {
       query.isRead = isRead;
     }
 
-    const total = await this.notificationModel.countDocuments(query);
-    const notifications = await this.notificationModel
-      .find(query)
-      .sort({ createTime: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .exec();
+    try {
+      const [total, notifications] = await Promise.all([
+        this.withRetry(() => this.notificationModel.countDocuments(query)),
+        this.withRetry(() =>
+          this.notificationModel
+            .find(query)
+            .sort({ createTime: -1 })
+            .skip((page - 1) * pageSize)
+            .limit(pageSize)
+            .exec(),
+        ),
+      ]);
 
-    return {
-      total,
-      list: notifications.map((notification) =>
-        NotificationResponseDto.fromNotification(notification),
-      ),
-    };
+      return {
+        total,
+        list: notifications.map((notification) =>
+          NotificationResponseDto.fromNotification(notification),
+        ),
+      };
+    } catch (error) {
+      this.logger.error(`获取用户通知失败: ${error.message}`, error.stack);
+      // 返回空结果，防止前端报错
+      return {
+        total: 0,
+        list: [],
+      };
+    }
   }
 
   /**
@@ -149,7 +194,14 @@ export class NotificationService {
    * @returns 未读通知数量
    */
   async getUnreadCount(userId: string): Promise<number> {
-    return this.notificationModel.countDocuments({ userId, isRead: false });
+    try {
+      return await this.withRetry(() =>
+        this.notificationModel.countDocuments({ userId, isRead: false }),
+      );
+    } catch (error) {
+      this.logger.error(`获取未读通知数量失败: ${error.message}`, error.stack);
+      return 0; // 出错时返回0，避免前端显示问题
+    }
   }
 
   /**
@@ -159,11 +211,18 @@ export class NotificationService {
    * @returns 是否标记成功
    */
   async markAsRead(userId: string, notificationId: string): Promise<boolean> {
-    const result = await this.notificationModel.updateOne(
-      { _id: notificationId, userId },
-      { isRead: true },
-    );
-    return result.modifiedCount > 0;
+    try {
+      const result = await this.withRetry(() =>
+        this.notificationModel.updateOne(
+          { _id: notificationId, userId },
+          { isRead: true },
+        ),
+      );
+      return result.modifiedCount > 0;
+    } catch (error) {
+      this.logger.error(`标记通知已读失败: ${error.message}`, error.stack);
+      return false;
+    }
   }
 
   /**
@@ -173,16 +232,23 @@ export class NotificationService {
    * @returns 标记的通知数量
    */
   async markAllAsRead(userId: string, ids?: string[]): Promise<number> {
-    const query: any = { userId, isRead: false };
+    try {
+      const query: any = { userId, isRead: false };
 
-    if (ids && ids.length > 0) {
-      query._id = { $in: ids };
+      if (ids && ids.length > 0) {
+        query._id = { $in: ids };
+      }
+
+      const result = await this.withRetry(() =>
+        this.notificationModel.updateMany(query, {
+          isRead: true,
+        }),
+      );
+      return result.modifiedCount;
+    } catch (error) {
+      this.logger.error(`批量标记通知已读失败: ${error.message}`, error.stack);
+      return 0;
     }
-
-    const result = await this.notificationModel.updateMany(query, {
-      isRead: true,
-    });
-    return result.modifiedCount;
   }
 
   /**
@@ -195,11 +261,18 @@ export class NotificationService {
     userId: string,
     notificationId: string,
   ): Promise<boolean> {
-    const result = await this.notificationModel.deleteOne({
-      _id: notificationId,
-      userId,
-    });
-    return result.deletedCount > 0;
+    try {
+      const result = await this.withRetry(() =>
+        this.notificationModel.deleteOne({
+          _id: notificationId,
+          userId,
+        }),
+      );
+      return result.deletedCount > 0;
+    } catch (error) {
+      this.logger.error(`删除通知失败: ${error.message}`, error.stack);
+      return false;
+    }
   }
 
   /**
@@ -210,13 +283,30 @@ export class NotificationService {
   async getNotificationSettings(
     userId: string,
   ): Promise<NotificationSettingsDocument> {
-    let settings = await this.notificationSettingsModel
-      .findOne({ userId })
-      .exec();
+    try {
+      let settings = await this.withRetry(() =>
+        this.notificationSettingsModel.findOne({ userId }).exec(),
+      );
 
-    // 如果不存在，创建默认设置
-    if (!settings) {
-      settings = new this.notificationSettingsModel({
+      // 如果不存在，创建默认设置
+      if (!settings) {
+        settings = new this.notificationSettingsModel({
+          userId,
+          emailNotify: true,
+          commentNotify: true,
+          systemNotify: true,
+          collaborationNotify: true,
+          aiNotify: true,
+        });
+        // 这里settings已经是一个新对象，不会为null
+        await this.withRetry(() => settings!.save());
+      }
+
+      return settings;
+    } catch (error) {
+      this.logger.error(`获取通知设置失败: ${error.message}`, error.stack);
+      // 返回默认设置
+      const defaultSettings = new this.notificationSettingsModel({
         userId,
         emailNotify: true,
         commentNotify: true,
@@ -224,10 +314,8 @@ export class NotificationService {
         collaborationNotify: true,
         aiNotify: true,
       });
-      await settings.save();
+      return defaultSettings;
     }
-
-    return settings;
   }
 
   /**

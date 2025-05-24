@@ -27,6 +27,11 @@ const nextConfig = {
         // 确保代理到后端9000端口，不要在路径中重复/api前缀
         destination: 'http://localhost:9000/api/:path*',
       },
+      // 添加Socket.io路径的代理
+      {
+        source: '/socket.io/:path*',
+        destination: 'http://localhost:9000/socket.io/:path*',
+      }
     ];
   },
   // 设置响应头，解决跨域问题

@@ -5,9 +5,11 @@ import * as cookieParser from 'cookie-parser'; // 引入 cookie-parser
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
-
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // 设置日志级别，方便调试
+    logger: ['error', 'warn', 'debug', 'log'],
+  });
 
   // 获取配置服务
   const configService = app.get(ConfigService);

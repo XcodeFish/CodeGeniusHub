@@ -33,7 +33,7 @@ import {
 @ApiTags('通知')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('api/notifications')
+@Controller('notifications')
 export class NotificationController {
   constructor(private notificationService: NotificationService) {}
 

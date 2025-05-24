@@ -1,12 +1,11 @@
 import React from 'react';
-import { Layout, Button, Avatar, Dropdown, Space, Badge } from 'antd';
+import { Layout, Button, Avatar, Dropdown, Space } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   UserOutlined,
   LogoutOutlined,
-  SettingOutlined,
-  BellOutlined
+  SettingOutlined
 } from '@ant-design/icons';
 import { useUserStore } from '@/stores/userStore';
 import { useAuth } from '@/modules/auth/useAuth';
@@ -14,7 +13,7 @@ import styles from './layout.module.scss';
 import type { MenuProps } from 'antd';
 import { openUserProfileModal } from '@/modules/auth/profile/UserProfileContent';
 import { useRouter } from 'next/router';
-
+import { NotificationDropdown } from '@/components/notification';
 import { openAccountSettingModal } from '@/modules/User/settings/AccountSettingModal';
 
 
@@ -76,13 +75,9 @@ const Header: React.FC<HeaderProps> = ({ collapsed, toggleSidebar }) => {
       </div>
       
       <div className={styles.headerRight}>
-        <Badge dot className={styles.notification}>
-          <Button 
-            type="text"
-            icon={<BellOutlined />} 
-            className={styles.notificationButton}
-          />
-        </Badge>
+        <div className={styles.notification}>
+          <NotificationDropdown />
+        </div>
         
         <Dropdown 
           menu={{ items }} 

@@ -12,7 +12,7 @@ import { UpdateNotificationSettingsDto } from './dto/notification.dto';
 @ApiTags('用户通知设置')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('api/user/notification-settings')
+@Controller('user/notification-settings')
 export class UserNotificationsController {
   constructor(private notificationService: NotificationService) {}
 

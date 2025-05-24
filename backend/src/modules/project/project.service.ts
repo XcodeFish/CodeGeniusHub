@@ -20,6 +20,8 @@ import { Permission } from '../../modules/user/schemas/user.schema';
 import { User } from '../../modules/user/schemas/user.schema';
 import { PROJECT_ERROR } from './dto/project.dto';
 import { PermissionService } from '../../common/services/permission.service';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/schemas/notification.schema';
 
 @Injectable()
 export class ProjectService {
@@ -27,6 +29,7 @@ export class ProjectService {
     @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
     @InjectModel(User.name) private userModel: Model<User>,
     private readonly permissionService: PermissionService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -296,6 +299,12 @@ export class ProjectService {
       // 跟踪是否有变更
       let hasChanges = false;
 
+      // 跟踪需要发送通知的新成员
+      const newMembersForNotification: {
+        userId: string;
+        permission: string;
+      }[] = [];
+
       // 批量添加成员
       for (const memberDto of membersDto.members) {
         // 检查要添加的用户是否存在
@@ -327,6 +336,12 @@ export class ProjectService {
             joinedAt: new Date(),
           });
           hasChanges = true;
+
+          // 添加到通知队列而不是立即发送
+          newMembersForNotification.push({
+            userId: memberDto.userId,
+            permission: memberDto.permission,
+          });
         }
 
         // 更新用户的项目权限列表
@@ -347,6 +362,16 @@ export class ProjectService {
         await project.save();
       }
 
+      // 项目更新保存成功后，异步发送通知
+      if (newMembersForNotification.length > 0) {
+        this.sendProjectInviteNotifications(
+          projectId,
+          userId,
+          project.name,
+          newMembersForNotification,
+        ).catch((err) => console.error('发送项目邀请通知失败:', err));
+      }
+
       // 返回更新后的项目
       return this.projectModel
         .findById(projectId)
@@ -358,6 +383,47 @@ export class ProjectService {
         throw new NotFoundException(PROJECT_ERROR.NOT_FOUND);
       }
       throw error;
+    }
+  }
+
+  /**
+   * 发送项目邀请通知
+   * @param projectId 项目ID
+   * @param inviterId 邀请人ID
+   * @param projectName 项目名称
+   * @param newMembers 新成员列表
+   */
+  private async sendProjectInviteNotifications(
+    projectId: string,
+    inviterId: string,
+    projectName: string,
+    newMembers: Array<{ userId: string; permission: string }>,
+  ) {
+    try {
+      // 获取邀请人信息
+      const inviter = await this.userModel.findById(inviterId);
+      if (!inviter) {
+        console.warn(`邀请人 ${inviterId} 不存在，无法发送通知`);
+        return;
+      }
+
+      // 批量发送通知
+      const notificationPromises = newMembers.map((member) =>
+        this.notificationService.createNotification(
+          member.userId,
+          '项目邀请',
+          `用户 ${inviter.username} 邀请您加入项目 '${projectName}'`,
+          NotificationType.PROJECT_INVITE,
+          `/project/${projectId}`,
+          { projectId, inviterId, permission: member.permission },
+        ),
+      );
+
+      await Promise.all(notificationPromises);
+      console.log(`成功发送 ${notificationPromises.length} 条项目邀请通知`);
+    } catch (error) {
+      console.error('批量发送项目邀请通知失败:', error);
+      // 通知失败不影响主流程
     }
   }
 

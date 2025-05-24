@@ -20,6 +20,7 @@ import { CollaborationModule } from './modules/collaboration/collaboration.modul
 import { AiModule } from './modules/ai/ai.module';
 import { MailModule } from './modules/mail/mail.module';
 import { MenuModule } from './modules/menu/menu.module';
+import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
   imports: [
@@ -62,6 +63,9 @@ import { MenuModule } from './modules/menu/menu.module';
 
     // 邮件模块
     MailModule,
+
+    // 通知模块
+    NotificationModule,
 
     // 公共模块
     CommonModule,

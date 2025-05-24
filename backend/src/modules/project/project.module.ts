@@ -6,6 +6,7 @@ import { ProjectService } from './project.service';
 import { Project, ProjectSchema } from './schemas/project.schema';
 import { User, UserSchema } from '../user/schemas/user.schema';
 import { CommonModule } from '../../common/common.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { CommonModule } from '../../common/common.module';
       { name: User.name, schema: UserSchema }, // 引入User模型，用于成员管理
     ]),
     CommonModule, // 导入CommonModule以使用PermissionService
+    NotificationModule, // 导入NotificationModule以使用NotificationService
   ],
   controllers: [ProjectController],
   providers: [ProjectService],

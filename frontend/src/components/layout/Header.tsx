@@ -13,6 +13,9 @@ import { useAuth } from '@/modules/auth/useAuth';
 import styles from './layout.module.scss';
 import type { MenuProps } from 'antd';
 import { openUserProfileModal } from '@/modules/auth/profile/UserProfileContent';
+import { useRouter } from 'next/router';
+
+import { openAccountSettingModal } from '@/modules/User/settings/AccountSettingModal';
 
 
 const { Header: AntHeader } = Layout;
@@ -28,18 +31,22 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ collapsed, toggleSidebar }) => {
   const { user } = useUserStore();
   const { logout } = useAuth();
-  
+  const router = useRouter();
   const items: MenuProps['items'] = [
     {
       key: 'profile',
       label: '个人资料',
       icon: <UserOutlined />,
-      onClick: () => handleClick()
+      onClick: () => handleProfileClick()
     },
     {
       key: 'settings',
       label: '账号设置',
-      icon: <SettingOutlined />
+      icon: <SettingOutlined />,
+      onClick: () => {
+        // 调用打开Modal的函数
+        openAccountSettingModal(user, 'profile', true);
+      }
     },
     {
       type: 'divider'
@@ -52,8 +59,7 @@ const Header: React.FC<HeaderProps> = ({ collapsed, toggleSidebar }) => {
     }
   ];
 
-  const handleClick = () => {
-    console.log('点击了', user);
+  const handleProfileClick = () => {
     openUserProfileModal(user, true);
   };
 

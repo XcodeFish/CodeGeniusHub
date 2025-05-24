@@ -97,10 +97,15 @@ export class UpdateUserDto {
   @IsOptional()
   email?: string;
 
-  @ApiProperty({ description: '用户角色', example: 'user' })
-  @IsString()
+  @ApiProperty({ description: '用户头像', example: '' })
   @IsOptional()
-  role?: string;
+  @IsString()
+  avatar?: string;
+
+  // @ApiProperty({ description: '用户角色', example: 'user' })
+  // @IsString()
+  // @IsOptional()
+  // role?: string;
 
   // 其他可更新的用户字段...
 }

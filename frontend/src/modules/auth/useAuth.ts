@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { message } from 'antd';
 import { useUserStore } from '@/stores/userStore';
 import { LoginParams, RegisterParams } from '@/types/auth';
-import { UserProfile, User } from '@/types/user';
+import { UserProfile, User, UpdateProfileParams } from '@/types';
 import authService from '@/services/auth';
+import userService from '@/services/user';
 import { AxiosError } from 'axios';
 import messageUtil from '@/utils/message-util';
 import { saveTokenInfo, clearTokenInfo, getToken, isTokenExpiredOrExpiring, isTokenRemembered } from '@/utils/token-util';
@@ -135,7 +135,7 @@ export function useAuth() {
     try {
       setLoading(true);
       const res = await authService.register(params);
-      message.success('注册成功，请登录');
+      messageUtil.success('注册成功，请登录');
       return res;
     } catch (error) {
       console.error('注册失败:', error);
@@ -152,7 +152,7 @@ export function useAuth() {
       await authService.logout();
       clearTokenInfo();
       storeLogout();
-      message.success('退出成功');
+      messageUtil.success('退出成功');
     } catch (error) {
       console.error('退出失败:', error);
       // 即使退出接口报错，也要清除本地登录状态
@@ -293,7 +293,7 @@ export function useAuth() {
     try {
       setLoading(true);
       await authService.forgotPassword(email);
-      message.success('重置密码邮件已发送，请查收');
+      messageUtil.success('重置密码邮件已发送，请查收');
     } catch (error) {
       console.error('发送重置邮件失败:', error);
       throw error;
@@ -307,7 +307,7 @@ export function useAuth() {
     try {
       setLoading(true);
       await authService.resetPassword(email, verifyCode, password);
-      message.success('密码重置成功，请登录');
+      messageUtil.success('密码重置成功，请登录');
     } catch (error) {
       console.error('重置密码失败:', error);
       throw error;
@@ -315,6 +315,38 @@ export function useAuth() {
       setLoading(false);
     }
   }, []);
+
+  // 更新当前登录用户信息
+  const updateUserProfile = useCallback(async (userProfile: UpdateProfileParams) => {
+    try {
+      setLoading(true);
+      const res = await userService.updateUserProfile(userProfile);
+      // 更新成功后，同步更新store中的用户信息
+      const currentUser = useUserStore.getState().user;
+      const currentToken = useUserStore.getState().token;
+      const currentPermission = useUserStore.getState().permission;
+      const firstLogin = useUserStore.getState().firstLogin;
+
+       // 只更新允许修改的字段
+    const updatedUser = {
+      ...currentUser,
+      username: userProfile.username || currentUser.username,
+      email: userProfile.email || currentUser.email,
+      phone: userProfile.phone || currentUser.phone,
+      avatar: userProfile.avatar || currentUser.avatar || ''
+    };
+    
+    // 更新store
+    setUser(updatedUser, currentToken, currentPermission, firstLogin);
+    
+    return res;
+    } catch (error) {
+      console.error('更新用户信息失败:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [])
 
   return {
     loading,
@@ -326,6 +358,7 @@ export function useAuth() {
     autoLogin,
     getCaptcha,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    updateUserProfile
   };
 }

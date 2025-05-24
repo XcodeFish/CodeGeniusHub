@@ -4,6 +4,7 @@ import { UserOutlined, EditOutlined, LoadingOutlined, PlusOutlined } from '@ant-
 import { useModalStore } from '@/stores/modalStore';
 import styles from '@/components/modal/appModal.module.scss';
 import { User } from '@/types/user';
+import { useAuth } from '@/modules/auth/useAuth';
 
 interface UserProfileContentProps {
   user: User;
@@ -13,6 +14,7 @@ interface UserProfileContentProps {
 // 查看模式
 const ViewMode: React.FC<UserProfileContentProps> = ({ user, canEdit }) => {
   const { openModal } = useModalStore();
+  const { updateUserProfile } = useAuth();
   
   const handleEdit = () => {
     openModal({
@@ -67,16 +69,28 @@ const EditMode: React.FC<UserProfileContentProps> = ({ user, canEdit }) => {
   const [loading, setLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | undefined>(user.avatar);
   const { closeModal } = useModalStore();
-  
-  const onFinish = (values: any) => {
+  const { updateUserProfile } = useAuth();
+  const onFinish = async (values: any) => {
     setLoading(true);
+    console.log('values', values);
+    const profileData = {
+      ...values,
+      avatar: imageUrl || ''
+    }
+    try {
+      const res = await updateUserProfile(profileData);
+    console.log('更新当前登录用户信息', res);
     
-    // 这里添加保存数据的逻辑，一般是调用API
     setTimeout(() => {
       message.success('个人信息更新成功');
       setLoading(false);
-      closeModal();
-    }, 1000);
+        closeModal();
+      }, 1000);
+    } catch (error) {
+      console.error('更新用户信息失败:', error);
+      message.error('更新用户信息失败');
+      setLoading(false);
+    }
   };
   
   const uploadButton = (
@@ -160,7 +174,7 @@ const EditMode: React.FC<UserProfileContentProps> = ({ user, canEdit }) => {
             { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号' }
           ]}
         >
-          <Input.TextArea rows={4} disabled={!canEdit} />
+          <Input disabled={!canEdit} maxLength={11} />
         </Form.Item>
         
         <Form.Item className={styles.formItem}>

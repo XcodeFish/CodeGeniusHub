@@ -10,7 +10,21 @@ import {
   ExplainCodeParams,
   ExplainCodeResponse,
   ChatParams,
-  ChatResponse
+  ChatResponse,
+  AIConfigParams,
+  AIConfigResponse,
+  AIConfigTestParams,
+  AIConfigTestResponse,
+  AIUsageStatsResponse,
+  AIHealthResponse,
+  AIModelRecommendationResponse,
+  AIProvidersResponse,
+  PromptTemplate,
+  CreatePromptTemplateParams,
+  UpdatePromptTemplateParams,
+  TestPromptTemplateParams,
+  TestPromptTemplateResponse,
+  InitPromptTemplatesResponse
 } from '@/types';
 
 // AI服务
@@ -38,6 +52,78 @@ const aiService = {
   // AI助手聊天
   chat(params: ChatParams): Promise<ChatResponse> {
     return http.post<ResponseData<ChatResponse>>('/ai/chat', params).then(res => res.data!);
+  },
+
+  // 获取AI配置
+  getConfig(): Promise<AIConfigResponse> {
+    return http.get<ResponseData<AIConfigResponse>>('/ai/config').then(res => res.data!);
+  },
+
+  // 更新AI配置
+  updateConfig(params: AIConfigParams): Promise<AIConfigResponse> {
+    return http.post<ResponseData<AIConfigResponse>>('/ai/config', params).then(res => res.data!);
+  },
+
+  // 测试AI配置
+  testConfig(params: AIConfigTestParams): Promise<AIConfigTestResponse> {
+    return http.post<ResponseData<AIConfigTestResponse>>('/ai/config/test', params).then(res => res.data!);
+  },
+
+  // 获取AI使用统计
+  getUsageStats(): Promise<AIUsageStatsResponse> {
+    return http.get<ResponseData<AIUsageStatsResponse>>('/ai/config/usage-stats').then(res => res.data!);
+  },
+
+  // 获取AI服务健康状态
+  getHealth(): Promise<AIHealthResponse> {
+    return http.get<ResponseData<AIHealthResponse>>('/ai/health').then(res => res.data!);
+  },
+
+  // 获取AI模型推荐
+  getModelRecommendation(task: string): Promise<AIModelRecommendationResponse> {
+    return http.get<ResponseData<AIModelRecommendationResponse>>(`/ai/recommend-model/${task}`).then(res => res.data!);
+  },
+
+  // 获取支持的AI提供商
+  getProviders(): Promise<AIProvidersResponse> {
+    return http.get<ResponseData<AIProvidersResponse>>('/ai/providers').then(res => res.data!);
+  },
+
+  // 提示词模板相关
+
+  // 创建提示词模板
+  createPromptTemplate(params: CreatePromptTemplateParams): Promise<PromptTemplate> {
+    return http.post<ResponseData<PromptTemplate>>('/ai/prompt-templates', params).then(res => res.data!);
+  },
+
+  // 获取提示词模板列表
+  getPromptTemplates(): Promise<PromptTemplate[]> {
+    return http.get<ResponseData<PromptTemplate[]>>('/ai/prompt-templates').then(res => res.data!);
+  },
+
+  // 更新提示词模板
+  updatePromptTemplate(id: string, params: UpdatePromptTemplateParams): Promise<PromptTemplate> {
+    return http.put<ResponseData<PromptTemplate>>(`/ai/prompt-templates/${id}`, params).then(res => res.data!);
+  },
+
+  // 删除提示词模板
+  deletePromptTemplate(id: string): Promise<boolean> {
+    return http.delete<ResponseData<boolean>>(`/ai/prompt-templates/${id}`).then(res => res.data!);
+  },
+
+  // 获取提示词模板详情
+  getPromptTemplateDetail(id: string): Promise<PromptTemplate> {
+    return http.get<ResponseData<PromptTemplate>>(`/ai/prompt-templates/${id}`).then(res => res.data!);
+  },
+
+  // 测试提示词模板
+  testPromptTemplate(params: TestPromptTemplateParams): Promise<TestPromptTemplateResponse> {
+    return http.post<ResponseData<TestPromptTemplateResponse>>('/ai/prompt-templates/test', params).then(res => res.data!);
+  },
+
+  // 初始化系统提示词模板
+  initPromptTemplates(): Promise<InitPromptTemplatesResponse> {
+    return http.post<ResponseData<InitPromptTemplatesResponse>>('/ai/prompt-templates/init', {}).then(res => res.data!);
   }
 };
 

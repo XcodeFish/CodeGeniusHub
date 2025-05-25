@@ -101,4 +101,149 @@ export interface ChatResponse {
   reply: string;
   conversationId: string;
   tokensUsed?: number;
+}
+
+// AI配置参数
+export interface AIConfigParams {
+  provider: string;
+  model: string;
+  apiKey?: string;
+  organization?: string;
+  temperature?: number;
+  maxTokens?: number;
+  defaultSettings?: Record<string, any>;
+}
+
+// AI配置响应
+export interface AIConfigResponse {
+  provider: string;
+  model: string;
+  organization?: string;
+  temperature: number;
+  maxTokens: number;
+  defaultSettings?: Record<string, any>;
+}
+
+// AI配置测试参数
+export interface AIConfigTestParams {
+  provider: string;
+  model: string;
+  apiKey: string;
+  organization?: string;
+}
+
+// AI配置测试响应
+export interface AIConfigTestResponse {
+  success: boolean;
+  message: string;
+  details?: Record<string, any>;
+}
+
+// AI使用统计响应
+export interface AIUsageStatsResponse {
+  totalTokens: number;
+  totalCost: number;
+  usageByDay: Array<{
+    date: string;
+    tokens: number;
+    cost: number;
+  }>;
+  usageByModel: Array<{
+    model: string;
+    tokens: number;
+    cost: number;
+  }>;
+}
+
+// AI健康状态响应
+export interface AIHealthResponse {
+  status: 'healthy' | 'degraded' | 'down';
+  message: string;
+  services: Array<{
+    name: string;
+    status: 'healthy' | 'degraded' | 'down';
+    latency?: number;
+    message?: string;
+  }>;
+}
+
+// AI模型推荐参数
+export interface AIModelRecommendationParams {
+  task: string;
+}
+
+// AI模型推荐响应
+export interface AIModelRecommendationResponse {
+  recommended: string;
+  alternatives: string[];
+  reasoning: string;
+}
+
+// AI提供商响应
+export interface AIProvidersResponse {
+  providers: Array<{
+    id: string;
+    name: string;
+    models: Array<{
+      id: string;
+      name: string;
+      capabilities: string[];
+      contextWindow: number;
+      recommended?: boolean;
+    }>;
+    requiresApiKey: boolean;
+  }>;
+}
+
+// 提示词模板
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  description: string;
+  template: string;
+  category: string;
+  language?: string;
+  framework?: string;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 创建提示词模板参数
+export interface CreatePromptTemplateParams {
+  name: string;
+  description: string;
+  template: string;
+  category: string;
+  language?: string;
+  framework?: string;
+}
+
+// 更新提示词模板参数
+export interface UpdatePromptTemplateParams {
+  name?: string;
+  description?: string;
+  template?: string;
+  category?: string;
+  language?: string;
+  framework?: string;
+}
+
+// 测试提示词模板参数
+export interface TestPromptTemplateParams {
+  template: string;
+  variables?: Record<string, any>;
+}
+
+// 测试提示词模板响应
+export interface TestPromptTemplateResponse {
+  renderedPrompt: string;
+  tokensUsed: number;
+  estimatedCost: number;
+}
+
+// 初始化系统提示词模板响应
+export interface InitPromptTemplatesResponse {
+  count: number;
+  templates: PromptTemplate[];
 } 

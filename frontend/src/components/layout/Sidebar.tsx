@@ -6,6 +6,7 @@ import { useMenu } from '@/hooks/useMenu';
 import styles from './layout.module.scss';
 import { MenuItem as MenuItemType } from '@/stores/menuStore';
 import type { MenuProps } from 'antd';
+import { useAIHelper } from '@/modules/AIHelper';
 
 const { Sider } = Layout;
 
@@ -18,7 +19,7 @@ type MenuItem = {
   icon?: React.ReactNode;
   label: string;
   children?: MenuItem[];
-  onClick?: () => void;
+  onClick?: (e?: any) => void;
 };
 
 /**
@@ -27,6 +28,13 @@ type MenuItem = {
 const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
   const router = useRouter();
   const { menus, loading, fetchMenus } = useMenu();
+  const { openAIHelper } = useAIHelper();
+
+  // 如果使用动态菜单，这部分应该由后端返回
+  const handleAIHelperClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openAIHelper();
+  };
   
   // 组件挂载时获取菜单数据
   useEffect(() => {
@@ -57,6 +65,35 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
    */
   const renderMenuItems = (menuItems: MenuItemType[]): MenuItem[] => {
     return menuItems.map(item => {
+
+       // 处理AI助手相关菜单项
+    if (item.moduleId === 'ai' || item.moduleId.startsWith('ai-')) {
+      // 主菜单"AI助手"直接打开侧边栏
+      if (item.moduleId === 'ai') {
+        return {
+          key: item.moduleId,
+          icon: getIcon(item.moduleIcon),
+          label: item.moduleName,
+          onClick: (e: any) => {
+            e.domEvent.preventDefault();
+            openAIHelper();
+          }
+        };
+      }
+      
+      // 子菜单项打开特定标签页
+      const tabKey = item.moduleId.replace('ai-', '');
+      return {
+        key: item.moduleId,
+        icon: getIcon(item.moduleIcon),
+        label: item.moduleName,
+        onClick: (e: any) => {
+          e.domEvent.preventDefault();
+          openAIHelper(tabKey);
+        }
+      };
+    }
+
       if (item.children && item.children.length > 0) {
         return {
           key: item.moduleId,

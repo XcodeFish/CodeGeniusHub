@@ -55,7 +55,8 @@ export class AiController {
   @ApiOperation({ summary: '根据描述生成代码' })
   @ApiBody({ type: GenerateCodeDto })
   async generateCode(@Body() generateCodeDto: GenerateCodeDto, @Req() req) {
-    const userId = req.user.sub;
+    const userId = req?.user?.id || req?.user?.userId;
+    console.log('userId', userId, req.user);
     return this.aiService.generateCode(
       userId,
       generateCodeDto.prompt,
@@ -76,7 +77,7 @@ export class AiController {
   @ApiOperation({ summary: '分析代码质量' })
   @ApiBody({ type: AnalyzeCodeDto })
   async analyzeCode(@Body() analyzeCodeDto: AnalyzeCodeDto, @Req() req) {
-    const userId = req.user.sub;
+    const userId = req?.user?.id || req?.user?.userId;
     return this.aiService.analyzeCode(
       userId,
       analyzeCodeDto.code,
@@ -94,7 +95,7 @@ export class AiController {
   @ApiOperation({ summary: '优化/重构代码' })
   @ApiBody({ type: OptimizeCodeDto })
   async optimizeCode(@Body() optimizeCodeDto: OptimizeCodeDto, @Req() req) {
-    const userId = req.user.sub;
+    const userId = req?.user?.id || req?.user?.userId;
     return this.aiService.optimizeCode(
       userId,
       optimizeCodeDto.code,
@@ -113,7 +114,7 @@ export class AiController {
   @ApiOperation({ summary: '编程助手对话' })
   @ApiBody({ type: ChatRequestDto })
   async chat(@Body() chatDto: ChatRequestDto, @Req() req) {
-    const userId = req.user.sub;
+    const userId = req?.user?.id || req?.user?.userId;
     return this.aiService.chat(userId, chatDto.message, {
       conversationId: chatDto.conversationId,
       codeContext: chatDto.codeContext,
@@ -136,7 +137,7 @@ export class AiController {
     },
     @Req() req,
   ) {
-    const userId = req.user.sub;
+    const userId = req?.user?.id || req?.user?.userId;
     return this.aiService.explainCode(userId, body.code, body.language, {
       detailLevel: body.detailLevel,
       audience: body.audience,

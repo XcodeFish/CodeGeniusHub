@@ -69,9 +69,11 @@ const aiService = {
     return http.post<ResponseData<AIConfigTestResponse>>('/ai/config/test', params).then(res => res.data!);
   },
 
-  // 获取AI使用统计
-  getUsageStats(): Promise<AIUsageStatsResponse> {
-    return http.get<ResponseData<AIUsageStatsResponse>>('/ai/config/usage-stats').then(res => res.data!);
+  /**
+   * 获取AI使用统计数据
+   */
+  getUsageStats: (params: { startDate?: string; endDate?: string; groupBy?: string }) => {
+    return http.get<ResponseData<AIUsageStatsResponse>>('/ai/config/usage-stats',  params );
   },
 
   // 获取AI服务健康状态
@@ -97,8 +99,8 @@ const aiService = {
   },
 
   // 获取提示词模板列表
-  getPromptTemplates(): Promise<PromptTemplate[]> {
-    return http.get<ResponseData<PromptTemplate[]>>('/ai/prompt-templates').then(res => res.data!);
+  getPromptTemplates(): Promise<{ templates: PromptTemplate[], total: number }> {
+    return http.get<ResponseData<{ templates: PromptTemplate[], total: number }>>('/ai/prompt-templates').then(res => res.data!);
   },
 
   // 更新提示词模板

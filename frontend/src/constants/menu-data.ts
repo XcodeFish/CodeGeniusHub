@@ -199,6 +199,30 @@ export const defaultMenus: Record<string, MenuItem[]> = {
           moduleIcon: 'FileText',
           moduleOrder: 2,
           children: []
+        },
+        {
+          moduleId: 'system-ai-config',
+          moduleName: 'AI配置',
+          modulePath: '/system/ai-config',
+          moduleIcon: 'CloudServer',
+          moduleOrder: 3,
+          children: []
+        },
+        {
+          moduleId: 'system-prompt-templates',
+          moduleName: '提示词模板',
+          modulePath: '/system/prompt-templates',
+          moduleIcon: 'FileText',
+          moduleOrder: 4,
+          children: []
+        },
+        {
+          moduleId: 'system-ai-stats',
+          moduleName: 'AI使用统计',
+          modulePath: '/system/ai-stats',
+          moduleIcon: 'BarChart',
+          moduleOrder: 5,
+          children: []
         }
       ]
     }

@@ -101,7 +101,7 @@ export interface ChatResponse {
   reply: string;
   conversationId: string;
   tokensUsed?: number;
-}
+} 
 
 // AI配置参数
 export interface AIConfigParams {
@@ -121,6 +121,16 @@ export interface AIConfigResponse {
   organization?: string;
   temperature: number;
   maxTokens: number;
+  baseUrl?: string;
+  usageLimit?: {
+    dailyTokenLimit: number;
+    userTokenLimit: number;
+  };
+  rateLimit?: {
+    requestsPerMinute: number;
+    tokensPerHour: number;
+  };
+  monitoringEnabled: boolean;
   defaultSettings?: Record<string, any>;
 }
 
@@ -197,16 +207,34 @@ export interface AIProvidersResponse {
 
 // 提示词模板
 export interface PromptTemplate {
-  id: string;
+  // 唯一标识符，后端使用_id，前端兼容id
+  _id?: string;
+  id?: string;
+  
+  // 基本信息
   name: string;
   description: string;
   template: string;
-  category: string;
+  
+  // 分类与标签
+  type: string;          // 类型: chat, explain, code-generation等
+  tags?: string[];       // 标签数组
+  category?: string;     // 兼容前端传递
+  
+  // 状态标记
+  isActive: boolean;     // 是否激活
+  isSystem: boolean;     // 是否系统模板
+  
+  // 语言和框架信息
   language?: string;
   framework?: string;
-  isSystem: boolean;
+  
+  // 时间戳
   createdAt: string;
   updatedAt: string;
+  
+  // MongoDB版本号
+  __v?: number;
 }
 
 // 创建提示词模板参数

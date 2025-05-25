@@ -228,12 +228,16 @@ export function useNotification() {
     }
   }, [socket, addNotification, fetchUnreadCount]);
 
-  // 初始化时获取未读通知数量
-  useEffect(() => {
-    if (token) {
-      fetchUnreadCount();
-    }
-  }, [token, fetchUnreadCount]);
+  // 对于通知计数，也需要添加节流
+   useEffect(() => {
+     if (token) {
+       // 防止初始化时多次调用
+       const timer = setTimeout(() => {
+         fetchUnreadCount();
+       }, 300);
+       return () => clearTimeout(timer);
+     }
+   }, [token, fetchUnreadCount]);
 
   return {
     notifications,

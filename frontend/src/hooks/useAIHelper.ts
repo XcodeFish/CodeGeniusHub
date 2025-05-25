@@ -348,9 +348,9 @@ export function useAIHelper() {
   // 获取提示词模板列表
   const getPromptTemplates = async () => {
     try {
-      const templates = await aiService.getPromptTemplates();
-      setPromptTemplates(templates);
-      return templates;
+      const response = await aiService.getPromptTemplates();
+      setPromptTemplates(response.templates || []);
+      return response.templates || [];
     } catch (err: any) {
       console.error('获取提示词模板失败', err);
       return [];
@@ -364,6 +364,16 @@ export function useAIHelper() {
       return await aiService.testPromptTemplate(params);
     } catch (err: any) {
       console.error('测试提示词模板失败', err);
+      return null;
+    }
+  };
+  
+  // 获取AI使用统计
+  const getUsageStats = async (params: { startDate?: string; endDate?: string; groupBy?: string }) => {
+    try {
+      return await aiService.getUsageStats(params);
+    } catch (err: any) {
+      console.error('获取AI使用统计失败', err);
       return null;
     }
   };
@@ -407,6 +417,12 @@ export function useAIHelper() {
     
     // 提示词模板相关方法
     getPromptTemplates,
-    testPromptTemplate
+    testPromptTemplate,
+    
+    // AI使用统计
+    getUsageStats,
+    
+    // 直接暴露aiService，方便组件调用其他未封装的方法
+    aiService
   };
 }

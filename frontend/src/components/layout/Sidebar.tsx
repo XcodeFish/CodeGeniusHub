@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout, Menu, Spin } from 'antd';
 import { useRouter } from 'next/router';
 import * as Icons from '@ant-design/icons';
@@ -29,6 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
   const router = useRouter();
   const { menus, loading, fetchMenus } = useMenu();
   const { openAIHelper } = useAIHelper();
+  const [menuOpenKeys, setMenuOpenKeys] = useState<string[]>([]);
 
   // 如果使用动态菜单，这部分应该由后端返回
   const handleAIHelperClick = (e: React.MouseEvent) => {
@@ -112,8 +113,49 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
     });
   };
 
-  // 当前选中的菜单项
-  const selectedKey = router.pathname.split('/')[1] || 'dashboard';
+  // 当前选中的菜单项 - 处理URL路径与moduleId的映射
+  const path = router.pathname;
+  const pathSegments = path.split('/').filter(Boolean);
+  
+  // 映射URL路径到菜单key
+  const mapPathToKeys = () => {
+    // 根路径特殊处理
+    if (pathSegments.length === 0) return { selectedKeys: ['dashboard'], openKeys: [] };
+    
+    // 一级菜单
+    if (pathSegments.length === 1) {
+      return { 
+        selectedKeys: [pathSegments[0]], 
+        openKeys: [] 
+      };
+    }
+    
+    // 二级菜单
+    if (pathSegments.length >= 2) {
+      const parentKey = pathSegments[0];
+      const childKey = `${parentKey}-${pathSegments[1]}`;
+      return { 
+        selectedKeys: [childKey], 
+        openKeys: [parentKey] 
+      };
+    }
+    
+    return { selectedKeys: [], openKeys: [] };
+  };
+  
+  const { selectedKeys, openKeys } = mapPathToKeys();
+  
+  // 初始设置打开的菜单项
+  useEffect(() => {
+    if (!collapsed && openKeys.length > 0) {
+      setMenuOpenKeys(openKeys);
+    }
+  }, [path, collapsed]);
+  
+  // 处理菜单展开/折叠
+  const handleOpenChange = (newOpenKeys: string[]) => {
+    setMenuOpenKeys(newOpenKeys);
+  };
 
   return (
     <Sider 
@@ -139,7 +181,9 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
       ) : (
         <Menu
           mode="inline"
-          selectedKeys={[selectedKey]}
+          selectedKeys={selectedKeys}
+          openKeys={collapsed ? [] : menuOpenKeys}
+          onOpenChange={handleOpenChange}
           className={styles.sidebarMenu}
           items={renderMenuItems(menus)}
         />

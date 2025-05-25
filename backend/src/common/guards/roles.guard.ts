@@ -43,14 +43,14 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user, params } = context.switchToHttp().getRequest();
-
+    console.log('user', user, 'params', params);
     // 如果请求中没有用户信息，表示未认证
-    if (!user || !user.id) {
+    if (!user || !user.userId) {
       throw new ForbiddenException('未授权访问');
     }
 
     // 检查是否系统管理员，系统管理员可以访问任何资源
-    if (await this.permissionService.isSystemAdmin(user.id)) {
+    if (await this.permissionService.isSystemAdmin(user.userId)) {
       return true;
     }
 
@@ -60,7 +60,7 @@ export class RolesGuard implements CanActivate {
     // 如果有项目ID，检查项目权限
     if (projectId) {
       const permission = await this.permissionService.getUserProjectPermission(
-        user.id,
+        user.userId,
         projectId,
       );
 
@@ -84,7 +84,7 @@ export class RolesGuard implements CanActivate {
 
     // 如果没有项目ID，只检查系统权限
     const systemPermission =
-      await this.permissionService.getUserSystemPermission(user.id);
+      await this.permissionService.getUserSystemPermission(user.userId);
 
     return requiredRoles.some((role) => {
       if (role === Permission.VIEWER) {

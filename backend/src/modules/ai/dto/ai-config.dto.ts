@@ -14,9 +14,25 @@ export class UpdateAiConfigDto {
   @ApiPropertyOptional({
     description: 'AI提供商',
     example: 'OpenAI',
-    enum: ['OpenAI', 'Claude', 'LocalLLM'],
+    enum: [
+      'OpenAI',
+      'Claude',
+      'LocalLLM',
+      'DeepSeek',
+      'Baidu',
+      'Zhipu',
+      'MiniMax',
+    ],
   })
-  @IsEnum(['OpenAI', 'Claude', 'LocalLLM'])
+  @IsEnum([
+    'OpenAI',
+    'Claude',
+    'LocalLLM',
+    'DeepSeek',
+    'Baidu',
+    'Zhipu',
+    'MiniMax',
+  ])
   @IsOptional()
   provider?: AiProvider;
 

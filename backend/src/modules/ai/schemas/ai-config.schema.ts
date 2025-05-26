@@ -1,7 +1,14 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, HydratedDocument } from 'mongoose';
 
-export type AiProvider = 'OpenAI' | 'Claude' | 'LocalLLM';
+export type AiProvider =
+  | 'OpenAI'
+  | 'Claude'
+  | 'LocalLLM'
+  | 'DeepSeek'
+  | 'Baidu'
+  | 'Zhipu'
+  | 'MiniMax';
 
 export interface IAiConfig {
   provider: AiProvider;

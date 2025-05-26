@@ -111,6 +111,7 @@ export interface AIConfigParams {
   organization?: string;
   temperature?: number;
   maxTokens?: number;
+  baseUrl?: string;
   defaultSettings?: Record<string, any>;
 }
 
@@ -132,6 +133,7 @@ export interface AIConfigResponse {
   };
   monitoringEnabled: boolean;
   defaultSettings?: Record<string, any>;
+  availableProviders?: string[];
 }
 
 // AI配置测试参数
@@ -140,6 +142,7 @@ export interface AIConfigTestParams {
   model: string;
   apiKey: string;
   organization?: string;
+  baseUrl?: string;
 }
 
 // AI配置测试响应

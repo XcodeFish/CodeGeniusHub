@@ -162,17 +162,32 @@ export class AiController {
         : '',
     };
 
-    // 添加可用提供商列表
-    const availableProviders = ['OpenAI', 'Claude', 'LocalLLM'];
+    // 获取可用提供商列表，但只提取ID，避免循环引用
+    try {
+      const { providers } = this.aiConfigService.getSupportedProviders();
+      const availableProviders = providers.map((p) => p.id);
 
-    return {
-      code: 0,
-      message: '获取AI配置成功',
-      data: {
-        ...maskedConfig,
-        availableProviders,
-      },
-    };
+      return {
+        code: 0,
+        message: '获取AI配置成功',
+        data: {
+          ...maskedConfig,
+          availableProviders,
+        },
+      };
+    } catch (error) {
+      // 使用控制器中的logger
+      console.error(`获取AI配置时出错: ${error.message}`, error.stack);
+      // 即使获取AI提供商失败，也返回配置信息
+      return {
+        code: 0,
+        message: '获取AI配置成功，但获取提供商列表失败',
+        data: {
+          ...maskedConfig,
+          availableProviders: ['OpenAI', 'Claude', 'LocalLLM', 'DeepSeek'], // 提供基本的提供商列表作为备选
+        },
+      };
+    }
   }
 
   @Post('config')
@@ -295,13 +310,42 @@ export class AiController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取支持的AI提供商' })
   async getSupportedProviders() {
-    const providers = this.aiConfigService.getSupportedProviders();
+    try {
+      const providersInfo = this.aiConfigService.getSupportedProviders();
 
-    return {
-      code: 0,
-      message: '获取AI提供商列表成功',
-      data: providers,
-    };
+      // 简化健康状态信息，避免可能的循环引用
+      const simplifiedProviders = providersInfo.providers.map((provider) => {
+        // 只保留简单的健康状态信息，避免复杂对象
+        const healthStatus = provider.healthStatus
+          ? {
+              status: provider.healthStatus.status,
+              lastCheck: provider.healthStatus.lastCheck,
+              latency: provider.healthStatus.latency,
+            }
+          : { status: 'unknown', lastCheck: null };
+
+        return {
+          ...provider,
+          healthStatus,
+        };
+      });
+
+      return {
+        code: 0,
+        message: '获取AI提供商列表成功',
+        data: {
+          ...providersInfo,
+          providers: simplifiedProviders,
+        },
+      };
+    } catch (error) {
+      console.error(`获取AI提供商列表时出错: ${error.message}`, error.stack);
+      return {
+        code: 1,
+        message: '获取AI提供商列表失败',
+        data: null,
+      };
+    }
   }
 
   // 提示词模板管理相关接口

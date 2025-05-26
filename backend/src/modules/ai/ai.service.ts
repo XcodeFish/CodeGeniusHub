@@ -329,6 +329,7 @@ export class AiService implements OnModuleInit {
           message: '聊天成功',
           data: {
             response: result.data.response,
+            reply: result.data.response,
             conversationId:
               options?.conversationId || this.generateConversationId(),
             tokensUsed: result.usage?.totalTokens || 0,

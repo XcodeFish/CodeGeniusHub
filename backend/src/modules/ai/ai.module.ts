@@ -13,6 +13,7 @@ import { AiConfigService } from './ai-config.service';
 import { OpenAIProvider } from './providers/openai.provider';
 import { ClaudeProvider } from './providers/claude.provider';
 import { LocalLlmProvider } from './providers/local-llm.provider';
+import { DeepSeekProvider } from './providers/deepseek.provider';
 
 import { AiConfig, AiConfigSchema } from './schemas/ai-config.schema';
 import {
@@ -45,6 +46,7 @@ import { CodeParser } from './utils/code-parser';
     OpenAIProvider,
     ClaudeProvider,
     LocalLlmProvider,
+    DeepSeekProvider,
     PromptBuilder,
     TokenCounter,
     CodeParser,

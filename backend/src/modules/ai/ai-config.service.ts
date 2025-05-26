@@ -13,6 +13,7 @@ import { AiConfig, AiConfigDocument } from './schemas/ai-config.schema';
 import { OpenAIProvider } from './providers/openai.provider';
 import { ClaudeProvider } from './providers/claude.provider';
 import { LocalLlmProvider } from './providers/local-llm.provider';
+import { DeepSeekProvider } from './providers/deepseek.provider';
 import { AiServiceResponse } from './interfaces/openai-response.interface';
 import { ConfigService } from '@nestjs/config';
 import { setTimeout, clearTimeout } from 'timers';
@@ -39,6 +40,7 @@ export class AiConfigService implements OnModuleInit {
     private readonly openaiProvider: OpenAIProvider,
     private readonly claudeProvider: ClaudeProvider,
     private readonly localLlmProvider: LocalLlmProvider,
+    private readonly deepSeekProvider: DeepSeekProvider,
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
   ) {
@@ -50,6 +52,10 @@ export class AiConfigService implements OnModuleInit {
       localllm: this.localLlmProvider,
       local: this.localLlmProvider,
       ollama: this.localLlmProvider,
+      deepseek: this.deepSeekProvider,
+      zhipu: this.openaiProvider, // 暂时使用OpenAI提供商作为兼容层
+      baidu: this.openaiProvider, // 暂时使用OpenAI提供商作为兼容层
+      minimax: this.openaiProvider, // 暂时使用OpenAI提供商作为兼容层
     };
 
     // 初始化时加载配置
@@ -642,6 +648,103 @@ export class AiConfigService implements OnModuleInit {
           requiresApiKey: true,
           requiresBaseUrl: true,
           healthStatus: this.healthStatus['claude'] || {
+            status: 'unknown',
+            lastCheck: null,
+          },
+        },
+        {
+          id: 'DeepSeek',
+          name: 'DeepSeek',
+          description: '国内领先的大模型平台',
+          models: [
+            {
+              id: 'deepseek-chat',
+              name: 'DeepSeek Chat (V3)',
+              description: '通用对话大模型',
+              tokens: 64000,
+              features: ['代码生成', '代码分析', '聊天'],
+              averageLatency: 1000,
+              costPer1kTokens: 0.002,
+            },
+            {
+              id: 'deepseek-reasoner',
+              name: 'DeepSeek Reasoner (R1)',
+              description: '专业推理模型',
+              tokens: 64000,
+              features: ['代码生成', '代码分析', '聊天'],
+              averageLatency: 1200,
+              costPer1kTokens: 0.003,
+            },
+          ],
+          requiresApiKey: true,
+          requiresBaseUrl: true,
+          healthStatus: this.healthStatus['deepseek'] || {
+            status: 'unknown',
+            lastCheck: null,
+          },
+        },
+        {
+          id: 'Baidu',
+          name: '文心一言',
+          description: '百度开发的大语言模型',
+          models: [
+            {
+              id: 'ernie-4.0',
+              name: 'ERNIE 4.0',
+              description: '文心大模型4.0',
+              tokens: 16000,
+              features: ['代码生成', '代码分析', '聊天'],
+              averageLatency: 1500,
+              costPer1kTokens: 0.002,
+            },
+          ],
+          requiresApiKey: true,
+          requiresBaseUrl: true,
+          healthStatus: this.healthStatus['baidu'] || {
+            status: 'unknown',
+            lastCheck: null,
+          },
+        },
+        {
+          id: 'Zhipu',
+          name: '智谱GLM',
+          description: '智谱AI开发的大语言模型',
+          models: [
+            {
+              id: 'glm-4',
+              name: 'GLM-4',
+              description: '通用大语言模型',
+              tokens: 32000,
+              features: ['代码生成', '代码分析', '聊天'],
+              averageLatency: 1300,
+              costPer1kTokens: 0.002,
+            },
+          ],
+          requiresApiKey: true,
+          requiresBaseUrl: true,
+          healthStatus: this.healthStatus['zhipu'] || {
+            status: 'unknown',
+            lastCheck: null,
+          },
+        },
+        {
+          id: 'MiniMax',
+          name: 'MiniMax',
+          description: 'MiniMax开发的大语言模型',
+          models: [
+            {
+              id: 'abab6-chat',
+              name: 'ABAB 6',
+              description: '高性能对话与代码生成模型',
+              tokens: 32000,
+              features: ['代码生成', '代码分析', '聊天'],
+              averageLatency: 1200,
+              costPer1kTokens: 0.002,
+            },
+          ],
+          requiresApiKey: true,
+          requiresBaseUrl: true,
+          healthStatus: this.healthStatus['minimax'] || {
             status: 'unknown',
             lastCheck: null,
           },

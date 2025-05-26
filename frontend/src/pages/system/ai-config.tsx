@@ -60,6 +60,17 @@ function AIConfig() {
             tokensPerHour: config.rateLimit?.tokensPerHour,
             monitoringEnabled: config.monitoringEnabled,
           });
+
+           // 添加这段代码，更新下拉框选项
+      if (config.availableProviders && Array.isArray(config.availableProviders)) {
+        // 将后端返回的简单数组转换为下拉框需要的格式
+        const formattedProviders = config.availableProviders.map(provider => ({
+          value: provider,
+          label: provider === 'Claude' ? 'Claude (Anthropic)' : 
+                 provider === 'LocalLLM' ? 'LocalLLM (Ollama, Llama等)' : provider
+        }));
+        setAvailableProviders(formattedProviders);
+      }
         }
       } catch (error) {
         message.error('获取AI配置失败');
@@ -70,7 +81,7 @@ function AIConfig() {
     };
 
     loadConfig();
-  }, [fetchAIConfig, form]);
+  }, [form]);
 
   // 测试AI配置
   const handleTest = async () => {
@@ -120,7 +131,7 @@ function AIConfig() {
           requestsPerMinute: values.requestsPerMinute,
           tokensPerHour: values.tokensPerHour,
         },
-        monitoringEnabled: values.monitoringEnabled,
+        // monitoringEnabled: values.monitoringEnabled,
       };
       
       const success = await updateAIConfig(configParams);

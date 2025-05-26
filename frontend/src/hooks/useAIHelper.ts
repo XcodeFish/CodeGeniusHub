@@ -278,29 +278,75 @@ export function useAIHelper() {
         codeContext: codeContext || undefined
       };
       
+      console.log('请求聊天参数:', params);
       const responseData = await aiService.chat(params);
+      console.log('聊天响应数据:', responseData);
       
       if (responseData.conversationId) {
         setConversationId(responseData.conversationId);
       }
 
+      // 确保至少有一个有效的回复字段
+      if (!responseData.reply && !responseData.response) {
+        console.warn('警告: API返回数据中既没有reply也没有response字段', responseData);
+      }
+
+      // 构造AI响应对象
       const aiResponse: AIResponse = {
         code: 0,
         message: 'AI回复成功',
         data: {
-          reply: responseData.reply,
+          // 优先使用reply字段，如果没有则使用response字段
+          reply: responseData.reply || responseData.response || '获取回复失败',
+          // 保留原始response字段，以便兼容不同的处理方式
+          response: responseData.response,
           tokensUsed: responseData.tokensUsed
         }
       };
-
+      
+      console.log('构造的aiResponse:', aiResponse);
+      // 类型安全地访问data字段
+      if (aiResponse.data && typeof aiResponse.data === 'object') {
+        console.log('aiResponse.data:', aiResponse.data);
+        console.log('aiResponse.data.reply:', aiResponse.data.reply);
+      }
+      
       setCurrentResponse(aiResponse);
-      addHistory({
+      
+      // 添加到聊天历史
+      const historyItem = {
         prompt: message,
         response: aiResponse,
+        type: 'chat' as const
+      };
+      console.log('添加到历史的项:', historyItem);
+      
+      // 确保历史记录项正确添加
+      try {
+        addHistory(historyItem);
+        console.log('历史记录已添加');
+      } catch (historyError) {
+        console.error('添加历史记录失败:', historyError);
+      }
+      
+    } catch (err: any) {
+      console.error('聊天错误:', err);
+      const errorMessage = err.message || 'AI对话失败，请稍后重试';
+      setError(errorMessage);
+      
+      // 即使出错也添加到历史记录，以便用户知道请求失败
+      const errorResponse: AIResponse = {
+        code: 1,
+        message: errorMessage,
+        data: '请求失败: ' + errorMessage
+      };
+      
+      addHistory({
+        prompt: message,
+        response: errorResponse,
         type: 'chat'
       });
-    } catch (err: any) {
-      setError(err.message || 'AI对话失败，请稍后重试');
+      
     } finally {
       setLoading(false);
     }

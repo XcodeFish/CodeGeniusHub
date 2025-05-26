@@ -98,10 +98,11 @@ export interface ChatParams {
 
 // AI聊天响应
 export interface ChatResponse {
-  reply: string;
+  reply?: string;
+  response?: string; // 添加DeepSeek API返回的response字段
   conversationId: string;
   tokensUsed?: number;
-} 
+}
 
 // AI配置参数
 export interface AIConfigParams {

@@ -1,0 +1,20 @@
+.container {
+  padding: 24px;
+  height: 100%;
+}
+
+.chatCard {
+  height: calc(100vh - 136px);
+  display: flex;
+  flex-direction: column;
+  
+  :global {
+    .ant-card-body {
+      flex: 1;
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+  }
+} 

@@ -65,13 +65,13 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
-      zustand:
-        specifier: ^5.0.5
-        version: 5.0.5(@types/react@19.1.5)(react@18.3.1)
     devDependencies:
       '@types/react-syntax-highlighter':
         specifier: ^15.5.13
         version: 15.5.13
+      zustand:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/react@19.1.5)(react@18.3.1)
 
 packages:
 

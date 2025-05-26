@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Layout, message } from 'antd';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import { AIHelperSidebar } from '@/modules/AIHelper';
 import Head from 'next/head';
 import { useSocketStore } from '@/stores/socketStore';
 import { useUserStore } from '@/stores/userStore';
@@ -89,7 +88,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title = "AI智能代�
             {children}
           </Content>
         </Layout>
-        <AIHelperSidebar />
       </Layout>
     </>
   );

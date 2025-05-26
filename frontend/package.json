@@ -32,10 +32,10 @@
     "react-syntax-highlighter": "^15.5.0",
     "sass": "^1.89.0",
     "socket.io-client": "^4.8.1",
-    "typescript": "^5.8.3",
-    "zustand": "^5.0.5"
+    "typescript": "^5.8.3"
   },
   "devDependencies": {
-    "@types/react-syntax-highlighter": "^15.5.13"
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "zustand": "^5.0.5"
   }
 }

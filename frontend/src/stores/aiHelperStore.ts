@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 /**
  * AI助手状态管理
@@ -7,37 +8,54 @@ import { create } from 'zustand';
 export interface AIResponse {
   code: number;
   message: string;
-  data?: {
-    generatedCode?: string;
-    explanation?: string;
-    alternatives?: string[];
-    tokensUsed?: number;
-    optimizedCode?: string;
-    changes?: Array<{
-      description: string;
-      oldCode?: string;
-      newCode?: string;
-    }>;
-    improvementSummary?: string;
-    score?: number;
-    issues?: Array<{
-      severity: 'error' | 'warning' | 'info';
-      message: string;
-      location: {
-        line: number;
-        column: number;
-      };
-      fix?: string;
-    }>;
-    strengths?: string[];
-    summary?: string;
-    reply?: string;
-    suggestions?: string[];
-    references?: string[];
-  }
+  data?: AIResponseData;
 }
 
-interface AIHistoryItem {
+// 将data字段定义为联合类型
+export type AIResponseData = string | AIResponseObject;
+
+// 响应数据对象类型
+export interface AIResponseObject {
+  // 代码生成相关字段
+  generatedCode?: string;
+  explanation?: string;
+  alternatives?: string[];
+  
+  // 代码优化相关字段
+  optimizedCode?: string;
+  changes?: Array<{
+    description: string;
+    oldCode?: string;
+    newCode?: string;
+  }>;
+  improvementSummary?: string;
+  
+  // 代码分析相关字段
+  score?: number;
+  issues?: Array<{
+    severity: 'error' | 'warning' | 'info';
+    message: string;
+    location: {
+      line: number;
+      column: number;
+    };
+    fix?: string;
+  }>;
+  strengths?: string[];
+  summary?: string;
+  
+  // 聊天相关字段
+  reply?: string;
+  response?: string;
+  suggestions?: string[];
+  references?: string[];
+  
+  // 通用字段
+  tokensUsed?: number;
+  [key: string]: any; // 添加索引签名，允许任意字段，增强兼容性
+};
+
+export interface AIHistoryItem {
   id: string;
   prompt: string;
   response: AIResponse | null;
@@ -79,38 +97,60 @@ interface AIHelperState {
   
 }
 
-export const useAIHelperStore = create<AIHelperState>((set) => ({
-  // 初始状态
-  visible: false,
-  activeTab: 'generate',
-  loading: false,
-  error: null,
-  history: [],
-  currentResponse: null,
-  prompt: '',
-  language: 'javascript',
-  framework: '',
-  codeContext: '',
+// 使用persist中间件持久化存储聊天历史到localStorage
+export const useAIHelperStore = create<AIHelperState>()(
+  persist(
+    (set) => ({
+      // 初始状态
+      visible: false,
+      activeTab: 'generate',
+      loading: false,
+      error: null,
+      history: [],
+      currentResponse: null,
+      prompt: '',
+      language: 'javascript',
+      framework: '',
+      codeContext: '',
 
-  // 操作方法
-  setVisible: (visible) => set({ visible }),
-  setActiveTab: (activeTab) => set({ activeTab }),
-  setLoading: (loading) => set({ loading }),
-  setError: (error) => set({ error }),
-  setPrompt: (prompt) => set({ prompt }),
-  setLanguage: (language) => set({ language }),
-  setFramework: (framework) => set({ framework }),
-  setCodeContext: (codeContext) => set({ codeContext }),
-  setCurrentResponse: (currentResponse) => set({ currentResponse }),
+      // 操作方法
+      setVisible: (visible) => set({ visible }),
+      setActiveTab: (activeTab) => set({ activeTab }),
+      setLoading: (loading) => set({ loading }),
+      setError: (error) => set({ error }),
+      setPrompt: (prompt) => set({ prompt }),
+      setLanguage: (language) => set({ language }),
+      setFramework: (framework) => set({ framework }),
+      setCodeContext: (codeContext) => set({ codeContext }),
+      setCurrentResponse: (currentResponse) => set({ currentResponse }),
 
-  addHistory: (item) => set((state) => ({
-    history: [{
-      ...item,
-      id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now()
-    }, ...state.history]
-  })),
-  
-  clearHistory: () => set({ history: [] })
-  
-}))
+      addHistory: (item) => set((state) => {
+        console.log('AIHelperStore: 添加历史记录项', item);
+        const newItem = {
+          ...item,
+          id: `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: Date.now()
+        };
+        console.log('AIHelperStore: 新的历史记录项', newItem);
+        console.log('AIHelperStore: 当前历史记录', state.history);
+        
+        return {
+          // 将新消息添加到数组末尾，而不是开头
+          history: [...state.history, newItem] 
+        };
+      }),
+      
+      clearHistory: () => set({ history: [] })
+      
+    }),
+    {
+      name: 'ai-helper-storage', // localStorage中的key
+      partialize: (state) => ({
+        // 只持久化需要的字段
+        history: state.history,
+        language: state.language,
+        framework: state.framework
+      })
+    }
+  )
+);

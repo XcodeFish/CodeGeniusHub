@@ -728,23 +728,27 @@ const AIChat: React.FC = () => {
       </div>
       
       <div className={styles.chatInput}>
-        <TextArea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="输入问题，按Enter发送"
-          autoSize={{ minRows: 1, maxRows: 4 }}
-          className={styles.textarea}
-        />
-        <Button
-          type="primary"
-          icon={<SendOutlined />}
-          onClick={handleSend}
-          disabled={!message.trim() || loading || processingOllama}
-          className={styles.sendButton}
-        >
-          发送
-        </Button>
+        <div style={{ display: 'flex', flex: 1, alignItems: 'center' }}>
+          <TextArea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="输入问题，按Enter发送"
+            autoSize={{ minRows: 1, maxRows: 4 }}
+            className={styles.textarea}
+            style={{ borderRadius: '4px', marginRight: '8px' }}
+          />
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={handleSend}
+            disabled={!message.trim() || loading || processingOllama}
+            className={styles.sendButton}
+            size="large"
+          >
+            发送
+          </Button>
+        </div>
       </div>
     </div>
   );

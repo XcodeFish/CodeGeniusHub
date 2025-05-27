@@ -20,9 +20,8 @@ body {
 
 // 滚动条美化
 ::-webkit-scrollbar {
-   width: 0;  // 将宽度设为0来隐藏垂直滚动条
-  height: 0; // 将高度设为0来隐藏水平滚动条
-  display: none; // 完全隐藏滚动条
+  width: 6px;  // 合适的滚动条宽度
+  height: 6px; // 合适的水平滚动条高度
 }
 
 ::-webkit-scrollbar-track {

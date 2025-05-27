@@ -5,6 +5,8 @@ import Header from './Header';
 import Head from 'next/head';
 import { useSocketStore } from '@/stores/socketStore';
 import { useUserStore } from '@/stores/userStore';
+import styles from './layout.module.scss';
+import classnames from 'classnames';
 
 const { Content } = Layout;
 
@@ -80,15 +82,20 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title = "AI智能代�
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      <Layout style={{ minHeight: '100vh' }}>
+      
+      {/* 使用独立结构，不再使用嵌套Layout */}
+      <div style={{ minHeight: '100vh' }}>
+        {/* 侧边栏 */}
         <Sidebar collapsed={collapsed} />
-        <Layout>
+        
+        {/* 右侧内容区 */}
+        <div className={classnames(styles.layoutWithSidebar, { [styles.collapsed]: collapsed })}>
           <Header collapsed={collapsed} toggleSidebar={toggleSidebar} />
-          <Content className="main-content">
+          <Content className={styles.mainContent}>
             {children}
           </Content>
-        </Layout>
-      </Layout>
+        </div>
+      </div>
     </>
   );
 };

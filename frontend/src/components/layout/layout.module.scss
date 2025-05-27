@@ -1,14 +1,21 @@
 // 主布局样式
-.main-content {
+.mainContent {
   padding: 24px;
   overflow: auto;
   background: #f5f5f5;
+  height: calc(100vh - 64px); // 减去顶部导航的高度
 }
 
 // 侧边栏样式
 .sidebar {
   box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
   z-index: 10;
+  height: 100vh; // 固定高度为视口高度
+  position: fixed; // 固定在左侧
+  left: 0;
+  overflow: hidden; // 不显示自身溢出
+  display: flex;
+  flex-direction: column; // 垂直排列子元素
   
   .logoContainer {
     height: 64px;
@@ -17,6 +24,7 @@
     justify-content: center;
     padding: 16px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    flex-shrink: 0; // 防止被压缩
     
     .logoSmall {
       font-size: 20px;
@@ -52,6 +60,9 @@
   
   .sidebarMenu {
     border-right: none;
+    flex: 1; // 占满剩余空间
+    overflow-y: auto; // 允许独立滚动
+    overflow-x: hidden; // 防止水平滚动
     
     :global(.ant-menu-item) {
       border-radius: 4px;
@@ -118,5 +129,15 @@
         font-weight: 500;
       }
     }
+  }
+}
+
+// 适配侧边栏的内容区布局
+.layoutWithSidebar {
+  margin-left: 220px; // 默认侧边栏宽度
+  transition: margin-left 0.2s;
+  
+  &.collapsed {
+    margin-left: 80px; // 折叠时的侧边栏宽度
   }
 } 

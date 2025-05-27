@@ -157,19 +157,42 @@
 
 .chatInput {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   padding: 16px;
   border-top: 1px solid #f0f0f0;
+  
+  .ant-input-group-wrapper {
+    flex: 1;
+  }
 }
 
 .textarea {
   flex: 1;
-  margin-right: 8px;
   resize: none;
+  border-radius: 4px;
+  
+  &.ant-input {
+    line-height: 1.5;
+  }
 }
 
 .sendButton {
-  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 15px;
+  height: 40px;
+  font-size: 16px;
+  margin-left: 8px;
+  border-radius: 4px;
+  
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  .anticon {
+    font-size: 18px;
+  }
 }
 
 .modelInfo {

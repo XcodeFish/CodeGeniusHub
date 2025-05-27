@@ -32,6 +32,7 @@ export function useAIHelper() {
     language,
     framework,
     codeContext,
+    selectedModel,
     setVisible,
     setActiveTab,
     setLoading,
@@ -41,6 +42,7 @@ export function useAIHelper() {
     setFramework,
     setCodeContext,
     setCurrentResponse,
+    setSelectedModel,
     addHistory,
     clearHistory
   } = useAIHelperStore();
@@ -275,7 +277,8 @@ export function useAIHelper() {
         message,
         conversationId: conversationId || undefined,
         fileId: fileId || undefined,
-        codeContext: codeContext || undefined
+        codeContext: codeContext || undefined,
+        model: selectedModel || undefined // 使用选中的模型，如果没有则使用默认模型
       };
       
       console.log('请求聊天参数:', params);
@@ -317,7 +320,8 @@ export function useAIHelper() {
       const historyItem = {
         prompt: message,
         response: aiResponse,
-        type: 'chat' as const
+        type: 'chat' as const,
+        model: selectedModel || undefined // 记录使用的模型
       };
       console.log('添加到历史的项:', historyItem);
       
@@ -344,7 +348,8 @@ export function useAIHelper() {
       addHistory({
         prompt: message,
         response: errorResponse,
-        type: 'chat'
+        type: 'chat',
+        model: selectedModel || undefined // 记录使用的模型
       });
       
     } finally {
@@ -438,6 +443,7 @@ export function useAIHelper() {
     codeContext,
     promptTemplates,
     aiConfig,
+    selectedModel,
     
     // 操作方法
     setPrompt,
@@ -445,6 +451,7 @@ export function useAIHelper() {
     setFramework,
     setCodeContext,
     setCurrentResponse,
+    setSelectedModel,
     openAIHelper,
     closeAIHelper,
     switchTab,

@@ -94,6 +94,7 @@ export interface ChatParams {
   projectId?: string;
   fileId?: string;
   codeContext?: string;
+  model?: string; // 指定使用的模型
 }
 
 // AI聊天响应

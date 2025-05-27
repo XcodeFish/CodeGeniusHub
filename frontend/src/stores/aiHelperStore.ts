@@ -63,6 +63,7 @@ export interface AIHistoryItem {
   timestamp: number;
   language?: string;
   framework?: string;
+  model?: string; // 添加模型字段，记录使用的模型
 }
 
 interface AIHelperState {
@@ -81,6 +82,9 @@ interface AIHelperState {
   language: string;
   framework: string;
   codeContext: string;
+  
+  // 选择的模型
+  selectedModel: string | null;
 
   // AI操作
   setVisible: (visible: boolean) => void;
@@ -92,6 +96,7 @@ interface AIHelperState {
   setFramework: (framework: string) => void;
   setCodeContext: (codeContext: string) => void;
   setCurrentResponse: (response: AIResponse | null) => void;
+  setSelectedModel: (model: string | null) => void; // 设置选中的模型
   addHistory: (item: Omit<AIHistoryItem, 'id' | 'timestamp'>) => void;
   clearHistory: () => void;
   
@@ -112,6 +117,7 @@ export const useAIHelperStore = create<AIHelperState>()(
       language: 'javascript',
       framework: '',
       codeContext: '',
+      selectedModel: null, // 默认为null，表示使用AI配置中的默认模型
 
       // 操作方法
       setVisible: (visible) => set({ visible }),
@@ -123,6 +129,7 @@ export const useAIHelperStore = create<AIHelperState>()(
       setFramework: (framework) => set({ framework }),
       setCodeContext: (codeContext) => set({ codeContext }),
       setCurrentResponse: (currentResponse) => set({ currentResponse }),
+      setSelectedModel: (selectedModel) => set({ selectedModel }),
 
       addHistory: (item) => set((state) => {
         console.log('AIHelperStore: 添加历史记录项', item);
@@ -149,7 +156,8 @@ export const useAIHelperStore = create<AIHelperState>()(
         // 只持久化需要的字段
         history: state.history,
         language: state.language,
-        framework: state.framework
+        framework: state.framework,
+        selectedModel: state.selectedModel // 持久化选中的模型
       })
     }
   )

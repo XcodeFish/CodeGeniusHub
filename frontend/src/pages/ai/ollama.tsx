@@ -2,6 +2,7 @@ import React from 'react';
 import { NextPage } from 'next';
 import { Layout } from 'antd';
 import OllamaTest from '@/components/OllamaTest';
+import MainLayout from '@/components/layout/MainLayout';
 
 const { Content } = Layout;
 
@@ -10,11 +11,11 @@ const { Content } = Layout;
  */
 const OllamaTestPage: NextPage = () => {
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <MainLayout>
       <Content style={{ padding: '20px' }}>
         <OllamaTest />
       </Content>
-    </Layout>
+    </MainLayout>
   );
 };
 

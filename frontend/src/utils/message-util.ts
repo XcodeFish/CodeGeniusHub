@@ -1,8 +1,9 @@
 import { message } from 'antd';
-import type { NoticeType } from 'antd/es/message/interface';
+import type { MessageInstance } from 'antd/es/message/interface';
 
 /**
  * 统一的消息提示工具
+ * 注意: 组件内部推荐使用 useApp() 获取message实例使用
  */
 const messageUtil = {
   /**
@@ -48,7 +49,12 @@ const messageUtil = {
    */
   loading: (content: string, duration?: number) => {
     return message.loading(content, duration);
-  }
+  },
+  
+  /**
+   * 为组件内部提供的message hooks提示
+   */
+  useMessage: () => message.useMessage()
 };
 
 export default messageUtil; 

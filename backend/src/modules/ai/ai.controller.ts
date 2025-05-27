@@ -57,18 +57,15 @@ export class AiController {
   async generateCode(@Body() generateCodeDto: GenerateCodeDto, @Req() req) {
     const userId = req?.user?.id || req?.user?.userId;
     console.log('userId', userId, req.user);
-    return this.aiService.generateCode(
-      userId,
-      generateCodeDto.prompt,
-      generateCodeDto.language,
-      {
-        framework: generateCodeDto.framework,
-        context: generateCodeDto.context,
-        projectContext: generateCodeDto.projectContext,
-        maxTokens: generateCodeDto.maxTokens,
-        temperature: generateCodeDto.temperature,
-      },
-    );
+    return this.aiService.generateCode(userId, {
+      prompt: generateCodeDto.prompt,
+      language: generateCodeDto.language,
+      framework: generateCodeDto.framework,
+      context: generateCodeDto.context,
+      projectContext: generateCodeDto.projectContext,
+      maxTokens: generateCodeDto.maxTokens,
+      temperature: generateCodeDto.temperature,
+    });
   }
 
   @Post('analyze-code')
@@ -115,7 +112,7 @@ export class AiController {
   @ApiBody({ type: ChatRequestDto })
   async chat(@Body() chatDto: ChatRequestDto, @Req() req) {
     const userId = req?.user?.id || req?.user?.userId;
-    return this.aiService.chat(userId, chatDto.message, {
+    return this.aiService.chat(userId, {
       conversationId: chatDto.conversationId,
       codeContext: chatDto.codeContext,
       projectId: chatDto.projectId,
@@ -255,11 +252,17 @@ export class AiController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取AI使用统计' })
   async getUsageStats(@Query() query: GetUsageStatsDto) {
-    return this.aiService.getUsageStats({
+    const data = await this.aiService.getUsageStats({
       startDate: query.startDate,
       endDate: query.endDate,
       groupBy: query.groupBy,
     });
+
+    return {
+      code: 0,
+      message: '获取AI使用统计成功',
+      data,
+    };
   }
 
   @Get('health')

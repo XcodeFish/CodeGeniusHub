@@ -382,9 +382,9 @@ export function useAIHelper() {
   };
 
   // 测试AI配置
-  const testAIConfig = async (provider: string, model: string, apiKey: string, baseUrl?: string) => {
+  const testAIConfig = async (provider: string, model: string, apiKey: string, baseUrl?: string, ollamaApiUrl?: string) => {
     try {
-      return await aiService.testConfig({ provider, model, apiKey, baseUrl });
+      return await aiService.testConfig({ provider, model, apiKey, baseUrl, ollamaApiUrl });
     } catch (err: any) {
       console.error('测试AI配置失败', err);
       return { success: false, message: err.message || '测试失败' };

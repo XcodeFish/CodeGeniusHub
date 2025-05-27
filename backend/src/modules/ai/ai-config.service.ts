@@ -46,16 +46,16 @@ export class AiConfigService implements OnModuleInit {
   ) {
     // 初始化提供商映射
     this.providers = {
-      openai: this.openaiProvider,
+      openai: this.openaiProvider as unknown as LlmProvider,
       claude: this.claudeProvider,
       anthropic: this.claudeProvider,
       localllm: this.localLlmProvider,
       local: this.localLlmProvider,
       ollama: this.localLlmProvider,
-      deepseek: this.deepSeekProvider,
-      zhipu: this.openaiProvider, // 暂时使用OpenAI提供商作为兼容层
-      baidu: this.openaiProvider, // 暂时使用OpenAI提供商作为兼容层
-      minimax: this.openaiProvider, // 暂时使用OpenAI提供商作为兼容层
+      deepseek: this.deepSeekProvider as unknown as LlmProvider,
+      zhipu: this.openaiProvider as unknown as LlmProvider, // 暂时使用OpenAI提供商作为兼容层
+      baidu: this.openaiProvider as unknown as LlmProvider, // 暂时使用OpenAI提供商作为兼容层
+      minimax: this.openaiProvider as unknown as LlmProvider, // 暂时使用OpenAI提供商作为兼容层
     };
 
     // 初始化时加载配置
@@ -529,7 +529,7 @@ export class AiConfigService implements OnModuleInit {
       this.logger.warn(
         `未知的提供商类型: ${config.provider}，使用默认的OpenAI`,
       );
-      return this.openaiProvider;
+      return this.openaiProvider as unknown as LlmProvider;
     }
 
     // 检查提供商健康状态

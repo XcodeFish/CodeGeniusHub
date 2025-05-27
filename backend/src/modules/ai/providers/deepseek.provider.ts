@@ -1,170 +1,293 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom, TimeoutError } from 'rxjs';
-import { timeout, catchError } from 'rxjs/operators';
-import { AxiosError } from 'axios';
+import axios from 'axios';
+import {
+  AIProvider,
+  ChatCompletionParams,
+  ChatCompletionResponse,
+} from '../interfaces/ai-provider.interface';
 import {
   LlmProvider,
-  ChatOptions,
-  OptimizeCodeOptions,
   GenerateCodeOptions,
   AnalyzeCodeOptions,
+  OptimizeCodeOptions,
+  ChatOptions,
 } from '../interfaces/llm-provider.interface';
 import { AiServiceResponse } from '../interfaces/openai-response.interface';
 import { TokenCounter } from '../utils/token-counter';
 import { CodeParser } from '../utils/code-parser';
-import { TestConnectionOptions } from '../interfaces/llm-provider.interface';
-// DeepSeek API响应接口
-interface DeepSeekCompletionResponse {
-  id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: Array<{
-    index: number;
-    message: {
-      role: string;
-      content: string;
-    };
-    finish_reason: string;
-  }>;
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
 
 @Injectable()
 export class DeepSeekProvider implements LlmProvider {
   private readonly logger = new Logger(DeepSeekProvider.name);
-  private defaultModel = 'deepseek-chat';
-  private readonly requestTimeout = 30000; // 30秒超时
+  private readonly apiKey: string;
+  private readonly apiUrl: string;
+  private readonly defaultModel: string;
+  private readonly availableModels: string[];
 
   constructor(
-    private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
-    private readonly tokenCounter: TokenCounter,
-    private readonly codeParser: CodeParser,
-  ) {}
+    private configService: ConfigService,
+    private readonly tokenCounter?: TokenCounter,
+    private readonly codeParser?: CodeParser,
+  ) {
+    this.apiKey = this.configService.get<string>('ai.deepseek.apiKey') || '';
+    this.apiUrl =
+      this.configService.get<string>('ai.deepseek.baseUrl') ||
+      'https://api.deepseek.com';
 
-  // 添加模型名称映射方法
-  private mapModelName(modelName: string): string {
-    // 如果传入的是提供商名称而不是模型ID，使用默认模型
-    if (modelName === 'DeepSeek') {
-      return 'deepseek-chat';
-    }
+    this.availableModels = this.configService.get<string[]>(
+      'ai.deepseek.models',
+    ) || ['deepseek-chat', 'deepseek-reasoner'];
 
-    // DeepSeek模型映射表 - 使用官方正确的模型名称
-    const modelMapping: Record<string, string> = {
-      'deepseek-chat': 'deepseek-chat', // DeepSeek-V3
-      'deepseek-coder': 'deepseek-chat', // 统一使用deepseek-chat
-      'deepseek-llm-7b-chat': 'deepseek-chat', // 修正旧名称
-      'deepseek-coder-6.7b-instruct': 'deepseek-chat',
-      'deepseek-reasoner': 'deepseek-reasoner', // DeepSeek-R1
-    };
+    this.defaultModel = this.availableModels[0] || 'deepseek-chat';
 
-    return modelMapping[modelName] || 'deepseek-chat'; // 默认使用deepseek-chat
-  }
-
-  // 获取默认模型
-  private getDefaultModel(): string {
-    return this.mapModelName(this.defaultModel);
+    this.logger.log(
+      `DeepSeek 提供者初始化，API URL: ${this.apiUrl}, 默认模型: ${this.defaultModel}`,
+    );
+    this.logger.log(`可用模型: ${this.availableModels.join(', ')}`);
+    this.logger.log(`API 密钥${this.apiKey ? '已配置' : '未配置'}`);
   }
 
   /**
-   * 发送请求到DeepSeek API
+   * 检查并获取有效的模型名称
+   * 如果提供的模型名称不在已知模型列表中，则返回默认模型
    */
-  private async sendRequest<T>(
-    data: any,
-    apiKey?: string,
-    baseUrl?: string,
-  ): Promise<AiServiceResponse<T>> {
-    // 记录映射前的模型名称
-    const originalModel = data.model;
+  private getValidModel(requestedModel?: string): string {
+    const model = requestedModel || this.defaultModel;
 
-    // 映射模型名称
-    if (data.model) {
-      data.model = this.mapModelName(data.model);
+    if (!this.availableModels.includes(model)) {
+      this.logger.warn(
+        `请求的模型"${model}"不在已知模型列表中，使用默认模型"${this.defaultModel}"`,
+      );
+      return this.defaultModel;
     }
 
-    // 设置DeepSeek API URL - 根据官方文档
-    let apiUrl = baseUrl || 'https://api.deepseek.com';
+    return model;
+  }
 
-    // 移除末尾斜杠
-    apiUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+  async chatCompletion(
+    params: ChatCompletionParams,
+  ): Promise<ChatCompletionResponse> {
+    const { messages, temperature, maxTokens } = params;
+    // 使用辅助方法获取有效的模型名称
+    const model = this.getValidModel(params.model);
+    const startTime = Date.now();
 
-    const url = `${apiUrl}/chat/completions`;
-    const key = apiKey || this.configService.get<string>('DEEPSEEK_API_KEY');
-    console.log('API URL:', url);
-    console.log('原始模型名称:', originalModel);
-    console.log('映射后模型名称:', data.model);
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/v1/chat/completions`,
+        {
+          model,
+          messages,
+          temperature: temperature || 0.7,
+          max_tokens: maxTokens,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          timeout: 30000,
+        },
+      );
 
-    if (!key) {
+      const endTime = Date.now();
+      this.logger.debug(
+        `DeepSeek API请求完成，耗时: ${endTime - startTime}ms，使用模型: ${model}`,
+      );
+
+      return response.data;
+    } catch (error) {
+      this.logger.error(`DeepSeek API请求失败: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async streamChatCompletion(
+    params: ChatCompletionParams,
+    onProgress: (chunk: any) => void,
+  ): Promise<void> {
+    const { messages, temperature, maxTokens } = params;
+    // 使用辅助方法获取有效的模型名称
+    const model = this.getValidModel(params.model);
+
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/v1/chat/completions`,
+        {
+          model,
+          messages,
+          temperature: temperature || 0.7,
+          max_tokens: maxTokens,
+          stream: true,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          responseType: 'stream',
+          timeout: 60000,
+        },
+      );
+
+      return new Promise((resolve, reject) => {
+        let buffer = '';
+
+        response.data.on('data', (chunk: Buffer) => {
+          try {
+            const text = chunk.toString();
+            buffer += text;
+
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (!line.trim() || line.trim() === 'data: [DONE]') continue;
+
+              const dataMatch = line.match(/^data: (.+)$/);
+              if (!dataMatch) continue;
+
+              try {
+                const data = JSON.parse(dataMatch[1]);
+                onProgress(data);
+              } catch (e) {
+                this.logger.error(`解析流式响应失败: ${e.message}`);
+              }
+            }
+          } catch (e) {
+            this.logger.error(`处理流式响应失败: ${e.message}`);
+          }
+        });
+
+        response.data.on('end', resolve);
+        response.data.on('error', reject);
+      });
+    } catch (error) {
+      this.logger.error(
+        `DeepSeek流式API请求失败: ${error.message}, 模型: ${model}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * 测试连接
+   */
+  async testConnection(
+    apiKey: string,
+    options?: {
+      model?: string;
+      baseUrl?: string;
+    },
+  ): Promise<
+    AiServiceResponse<{
+      models: string[];
+      latency: number;
+      quota: {
+        total: number;
+        used: number;
+        remaining: number;
+      };
+    }>
+  > {
+    const startTime = Date.now();
+
+    // 使用辅助方法获取有效的模型名称
+    const model = this.getValidModel(options?.model);
+    const baseUrl = options?.baseUrl || this.apiUrl;
+    const useApiKey = apiKey || this.apiKey;
+
+    // 检查API密钥是否存在
+    if (!useApiKey) {
+      this.logger.error('DeepSeek API连接测试失败: 未提供API密钥');
       return {
         success: false,
         error: {
-          code: 'no_api_key',
-          message: 'DeepSeek API密钥未配置',
+          code: 'missing_api_key',
+          message: 'DeepSeek API密钥未配置，请在系统设置中配置有效的API密钥',
         },
       };
     }
 
-    try {
-      const startTime = Date.now();
+    this.logger.log(
+      `开始测试DeepSeek API连接，baseUrl: ${baseUrl}, model: ${model}`,
+    );
 
-      const response = await firstValueFrom(
-        this.httpService
-          .post<T>(url, data, {
-            headers: {
-              Authorization: `Bearer ${key}`,
-              'Content-Type': 'application/json',
-            },
-          })
-          .pipe(
-            timeout(this.requestTimeout),
-            catchError((error) => {
-              if (error instanceof TimeoutError) {
-                this.logger.error(`DeepSeek API请求超时`);
-                throw new Error('API请求超时，请稍后重试');
-              }
-              throw error;
-            }),
-          ),
+    try {
+      // 简单消息请求测试连接
+      const response = await axios.post(
+        `${baseUrl}/v1/chat/completions`,
+        {
+          model,
+          messages: [{ role: 'user', content: '你好' }],
+          max_tokens: 10,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${useApiKey}`,
+          },
+          timeout: 10000,
+        },
       );
 
-      const endTime = Date.now();
-      this.logger.debug(`DeepSeek API请求完成，耗时: ${endTime - startTime}ms`);
-
-      // 处理DeepSeek API的响应
-      const resp = response.data as any;
+      const latency = Date.now() - startTime;
+      this.logger.log(
+        `DeepSeek API连接测试成功，耗时: ${latency}ms, 使用模型: ${model}`,
+      );
 
       return {
         success: true,
-        data: resp as T,
-        usage: resp.usage
-          ? {
-              promptTokens: resp.usage.prompt_tokens,
-              completionTokens: resp.usage.completion_tokens,
-              totalTokens: resp.usage.total_tokens,
-            }
-          : undefined,
+        data: {
+          models: this.availableModels,
+          latency,
+          quota: {
+            total: response.data?.quota?.total || 1000000,
+            used: response.data?.quota?.used || 0,
+            remaining: response.data?.quota?.remaining || 1000000,
+          },
+        },
       };
     } catch (error) {
-      const axiosError = error as AxiosError<any>;
-      const errorMessage =
-        axiosError.response?.data?.error?.message || axiosError.message;
-      const errorType =
-        axiosError.response?.data?.error?.type || 'unknown_error';
+      const axiosError = error.isAxiosError ? error : null;
+      const statusCode = axiosError?.response?.status;
+      const responseData = axiosError?.response?.data;
 
-      this.logger.error(`DeepSeek API错误: ${errorMessage}`, axiosError.stack);
+      let errorMessage = `DeepSeek API连接测试失败: ${error.message}`;
+      let errorCode = 'connection_failed';
+
+      if (statusCode === 401 || statusCode === 403) {
+        errorMessage = 'API密钥无效或未授权';
+        errorCode = 'invalid_api_key';
+      } else if (statusCode === 400) {
+        if (responseData?.error?.message?.includes('Model Not Exist')) {
+          errorMessage = `模型"${model}"不存在或不可用，请检查模型名称是否正确`;
+          errorCode = 'model_not_found';
+
+          // 尝试提供可能的模型列表供参考
+          this.logger.warn(
+            `尝试的模型"${model}"不存在，可用模型列表: ${this.availableModels.join(', ')}`,
+          );
+        } else {
+          errorMessage = `请求格式错误: ${responseData?.error?.message || '未知错误'}`;
+          errorCode = 'invalid_request';
+        }
+      } else if (statusCode === 404) {
+        errorMessage = `API端点不存在，请检查基础URL和模型名称`;
+        errorCode = 'endpoint_not_found';
+      }
+
+      this.logger.error(
+        `${errorMessage}, 状态码: ${statusCode}, 详情: ${JSON.stringify(responseData || {})}`,
+      );
 
       return {
         success: false,
         error: {
-          code: errorType,
+          code: errorCode,
           message: errorMessage,
+          details: responseData?.error || null,
         },
       };
     }
@@ -184,335 +307,58 @@ export class DeepSeekProvider implements LlmProvider {
       alternatives: string[];
     }>
   > {
-    // 直接获取映射后的模型名称
-    const modelName = options?.model || this.defaultModel;
-    const model = this.mapModelName(modelName);
-    const maxTokens = options?.maxTokens || 2000;
-    const temperature = options?.temperature || 0.3;
+    try {
+      // 使用辅助方法获取有效的模型名称
+      const model = this.getValidModel(options?.model);
+      const temperature = options?.temperature || 0.3;
 
-    // 构建系统消息
-    const systemContent = `你是一位${language}编程专家，擅长编写清晰、高效、符合最佳实践的代码。
-请根据用户的需求，编写完整、可运行的代码，并附上必要的解释。`;
+      const systemMessage = `你是一位${language}编程专家，擅长编写清晰、高效、符合最佳实践的代码。`;
+      const userMessage = `请根据以下需求编写${language}代码:\n${prompt}\n${
+        options?.framework ? `使用框架: ${options.framework}\n` : ''
+      }${options?.context ? `上下文代码:\n${options.context}\n` : ''}`;
 
-    // 构建用户消息
-    let userContent = `需求: ${prompt}\n\n`;
-    userContent += `编程语言: ${language}\n\n`;
-
-    if (options?.framework) {
-      userContent += `框架: ${options.framework}\n\n`;
-    }
-
-    if (options?.context) {
-      userContent += `上下文代码:\n\`\`\`\n${options.context}\n\`\`\`\n\n`;
-    }
-
-    userContent += `请编写一个满足上述需求的代码实现，并以JSON格式返回结果：
-{
-  "generatedCode": "完整的代码实现",
-  "explanation": "代码的详细解释",
-  "alternatives": ["可选的其他实现方式1", "可选的其他实现方式2"]
-}`;
-
-    const result = await this.sendRequest<DeepSeekCompletionResponse>(
-      {
+      const response = await this.chatCompletion({
         model,
         messages: [
-          {
-            role: 'system',
-            content: systemContent,
-          },
-          {
-            role: 'user',
-            content: userContent,
-          },
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userMessage },
         ],
-        max_tokens: maxTokens,
         temperature,
-      },
-      options?.apiKey,
-      options?.baseUrl,
-    );
+        maxTokens: options?.maxTokens || 2000,
+      });
 
-    if (!result.success || !result.data) {
-      return result as AiServiceResponse<any>;
-    }
+      const generatedContent = response.choices[0]?.message?.content || '';
 
-    // 解析返回的内容
-    const responseContent = result.data.choices?.[0]?.message?.content || '';
-    let parsedResponse = {
-      generatedCode: '',
-      explanation: '',
-      alternatives: [],
-    };
-
-    try {
-      // 尝试解析JSON格式的响应
-      const jsonMatch = responseContent.match(/```json\n([\s\S]*?)\n```/) ||
-        responseContent.match(/```([\s\S]*?)```/) || [null, responseContent];
-
-      const jsonContent = jsonMatch[1];
-      parsedResponse = JSON.parse(jsonContent);
-    } catch (error) {
-      // 如果解析失败，尝试从文本中提取代码
-      const codeBlocks = this.codeParser.extractCodeBlocks(responseContent);
-      parsedResponse = {
-        generatedCode: codeBlocks.length > 0 ? codeBlocks[0] : '',
-        explanation: responseContent.replace(/```[\s\S]*?```/g, '').trim(),
-        alternatives: [],
-      };
-    }
-
-    return {
-      success: true,
-      data: {
-        generatedCode: parsedResponse.generatedCode,
-        explanation: parsedResponse.explanation,
-        alternatives: parsedResponse.alternatives || [],
-      },
-      usage: result.usage,
-    };
-  }
-
-  /**
-   * 测试连接
-   */
-  async testConnection(
-    apiKey: string,
-    options?: TestConnectionOptions,
-  ): Promise<
-    AiServiceResponse<{
-      models: string[];
-      latency: number;
-      quota: { total: number; used: number; remaining: number };
-    }>
-  > {
-    try {
-      // 获取参数
-      const model = options?.model
-        ? this.mapModelName(options.model)
-        : this.getDefaultModel();
-
-      // 设置DeepSeek API URL - 根据官方文档
-      let apiUrl = options?.baseUrl || 'https://api.deepseek.com';
-
-      // 移除末尾斜杠
-      apiUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
-
-      // 使用models API端点测试连接
-      const url = `${apiUrl}/models`;
-      console.log('测试连接URL:', url);
-
-      const response = await firstValueFrom(
-        this.httpService
-          .get(url, {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-          })
-          .pipe(timeout(this.requestTimeout)),
-      );
-
-      // 记录支持的模型列表，用于调试
-      console.log(
-        'DeepSeek支持的模型:',
-        response.data?.data?.map((m) => m.id)?.join(', '),
-      );
+      // 提取代码和解释
+      const generatedCode =
+        this.codeParser?.extractGeneratedCode(generatedContent) ||
+        generatedContent;
+      const explanation =
+        this.codeParser?.extractExplanation(generatedContent) || '';
 
       return {
         success: true,
         data: {
-          models: response.data.data?.map((m) => m.id) || [],
-          latency: 0,
-          quota: { total: 1000000, used: 0, remaining: 1000000 }, // 默认值
+          generatedCode,
+          explanation,
+          alternatives: [],
+        },
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0,
         },
       };
     } catch (error) {
-      this.logger.error(`DeepSeek API错误: ${error.message}`, error.stack);
+      this.logger.error(`DeepSeek生成代码失败: ${error.message}`);
       return {
         success: false,
         error: {
-          code: error.response?.status || 'unknown',
-          message: error.message,
+          code: 'generation_failed',
+          message: `生成代码失败: ${error.message}`,
         },
       };
     }
-  }
-
-  /**
-   * 聊天对话
-   */
-  async chat(
-    messages: string | Array<{ role: string; content: string }>,
-    options?: ChatOptions,
-  ): Promise<
-    AiServiceResponse<{
-      response: string;
-      conversationId: string;
-    }>
-  > {
-    // 直接获取映射后的模型名称
-    const modelName = options?.model || this.defaultModel;
-    const model = this.mapModelName(modelName);
-
-    // 构建系统消息
-    let systemContent = `你是一位编程助手，擅长回答编程相关的问题，提供代码示例和问题解决方案。`;
-
-    if (options?.codeContext) {
-      systemContent += `\n\n以下是当前的代码上下文，你可以参考它来回答问题：\n\`\`\`\n${options.codeContext}\n\`\`\``;
-    }
-
-    if (options?.customPrompt) {
-      systemContent = options.customPrompt;
-    }
-
-    // 处理消息参数
-    let formattedMessages;
-    if (typeof messages === 'string') {
-      // 如果消息是字符串，将其作为用户消息
-      formattedMessages = [
-        {
-          role: 'system',
-          content: systemContent,
-        },
-        {
-          role: 'user',
-          content: messages,
-        },
-      ];
-    } else {
-      // 如果消息是数组，添加系统消息
-      formattedMessages = [
-        {
-          role: 'system',
-          content: systemContent,
-        },
-        ...messages,
-      ];
-    }
-
-    // 使用 options.history 如果存在
-    if (options?.history && options.history.length > 0) {
-      // 只保留系统消息
-      formattedMessages = [
-        formattedMessages[0],
-        ...options.history,
-        ...formattedMessages.slice(1),
-      ];
-    }
-
-    const result = await this.sendRequest<DeepSeekCompletionResponse>(
-      {
-        model,
-        messages: formattedMessages,
-        temperature: 0.7, // 使用固定值而非从options中获取
-      },
-      options?.apiKey,
-      options?.baseUrl,
-    );
-
-    if (!result.success || !result.data) {
-      return result as AiServiceResponse<any>;
-    }
-
-    const responseContent = result.data.choices?.[0]?.message?.content || '';
-
-    // 生成唯一会话ID
-    const conversationId =
-      result.data.id ||
-      `deepseek-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-
-    return {
-      success: true,
-      data: {
-        response: responseContent,
-        conversationId,
-      },
-      usage: result.usage,
-    };
-  }
-
-  /**
-   * 优化代码
-   */
-  async optimizeCode(
-    code: string,
-    language: string,
-    options?: OptimizeCodeOptions,
-  ): Promise<
-    AiServiceResponse<{
-      optimizedCode: string;
-      changes: string[];
-      improvementSummary: string;
-    }>
-  > {
-    // 实现代码优化逻辑
-    const prompt = `请优化以下${language}代码:\n\n\`\`\`${language}\n${code}\n\`\`\`\n\n`;
-
-    // 添加优化目标
-    let optimizationGoals =
-      options?.optimizationGoals?.join(', ') ||
-      '提高性能、提高可读性、减少代码复杂度';
-
-    // 构建提示词
-    let userContent = `${prompt}\n优化目标: ${optimizationGoals}\n`;
-
-    if (options?.context) {
-      userContent += `\n上下文信息:\n${options.context}\n`;
-    }
-
-    userContent += `\n请返回优化后的代码和改进总结。`;
-
-    // 直接获取映射后的模型名称
-    const modelName = options?.model || this.defaultModel;
-    const model = this.mapModelName(modelName);
-
-    // 发送请求
-    const result = await this.sendRequest<DeepSeekCompletionResponse>(
-      {
-        model,
-        messages: [
-          {
-            role: 'system',
-            content: `你是一位专业的${language}代码优化专家，擅长根据指定目标优化代码。请提供详细的优化建议和实现。`,
-          },
-          {
-            role: 'user',
-            content: userContent,
-          },
-        ],
-        max_tokens: 2000,
-        temperature: 0.3,
-      },
-      options?.apiKey,
-      options?.baseUrl,
-    );
-
-    // 处理响应
-    if (!result.success || !result.data) {
-      return result as AiServiceResponse<any>;
-    }
-
-    // 解析响应内容
-    const responseContent = result.data.choices[0]?.message?.content || '';
-
-    // 从响应中提取优化后的代码
-    const codeBlocks = this.codeParser.extractCodeBlocks(responseContent);
-    const optimizedCode = codeBlocks.length > 0 ? codeBlocks[0] : code;
-
-    // 提取改进总结
-    const summary = responseContent.replace(/```[\s\S]*?```/g, '').trim();
-
-    // 返回结果，注意changes字段是string[]类型
-    return {
-      success: true,
-      data: {
-        optimizedCode,
-        changes: [summary], // 将改进总结作为变更列表中的唯一条目
-        improvementSummary: summary,
-      },
-      usage: result.usage,
-    };
   }
 
   /**
@@ -530,104 +376,280 @@ export class DeepSeekProvider implements LlmProvider {
       summary: string;
     }>
   > {
-    const analysisLevel = options?.analysisLevel || 'detailed';
+    try {
+      // 使用辅助方法获取有效的模型名称
+      const model = this.getValidModel(options?.model);
+      const analysisLevel = options?.analysisLevel || 'detailed';
 
-    // 直接获取映射后的模型名称
-    const modelName = options?.model || this.defaultModel;
-    const model = this.mapModelName(modelName);
+      const systemMessage = `你是一位经验丰富的代码审核专家，专门分析${language}代码。`;
+      const userMessage = `请对以下${language}代码进行${analysisLevel}级别分析:\n\`\`\`${language}\n${code}\n\`\`\``;
 
-    // 构建系统消息
-    const systemContent = `你是一位${language}代码分析专家，擅长分析代码结构、质量、性能和安全性。
-请根据以下代码进行${analysisLevel === 'basic' ? '基础' : analysisLevel === 'detailed' ? '详细' : '全面'}分析。`;
-
-    // 构建用户消息
-    let userContent = `请分析以下${language}代码:\n\n\`\`\`${language}\n${code}\n\`\`\`\n\n`;
-
-    if (options?.context) {
-      userContent += `上下文信息:\n${options.context}\n\n`;
-    }
-
-    userContent += `请分析代码的质量，返回以下信息：
-1. 总体评分 (0-100)
-2. 发现的问题和优化建议
-3. 代码的优点和长处
-4. 总结性评价`;
-
-    const result = await this.sendRequest<DeepSeekCompletionResponse>(
-      {
+      const response = await this.chatCompletion({
         model,
         messages: [
-          {
-            role: 'system',
-            content: systemContent,
-          },
-          {
-            role: 'user',
-            content: userContent,
-          },
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userMessage },
         ],
-        max_tokens: 2000,
-        temperature: 0.3,
-      },
-      options?.apiKey,
-      options?.baseUrl,
-    );
+        temperature: 0.2,
+      });
 
-    if (!result.success || !result.data) {
-      return result as AiServiceResponse<any>;
-    }
+      const analysisContent = response.choices[0]?.message?.content || '';
 
-    // 解析返回的内容
-    const responseContent = result.data.choices[0]?.message?.content || '';
+      // 简单解析分析结果
+      const scoreMatcher = analysisContent.match(
+        /(\d+)\/100|评分[：:]\s*(\d+)/,
+      );
+      const score = scoreMatcher
+        ? parseInt(scoreMatcher[1] || scoreMatcher[2], 10)
+        : 70;
 
-    try {
-      // 尝试解析JSON格式的响应
-      const jsonMatch = responseContent.match(/```json\n([\s\S]*?)\n```/) ||
-        responseContent.match(/```([\s\S]*?)```/) || [null, responseContent];
-
-      const jsonContent = jsonMatch[1];
-      const parsedResponse = JSON.parse(jsonContent);
-
-      // 确保issues是字符串数组
-      const issues = Array.isArray(parsedResponse.issues)
-        ? parsedResponse.issues.map((issue) =>
-            typeof issue === 'string'
-              ? issue
-              : `${issue.severity || '警告'}: ${issue.message || '问题'} (行 ${issue.line || 'unknown'})${issue.fix ? ' - 建议: ' + issue.fix : ''}`,
-          )
-        : [];
+      const issues = this.extractListItems(analysisContent, [
+        '问题',
+        '缺陷',
+        '弱点',
+        'issues',
+        'weaknesses',
+      ]);
+      const strengths = this.extractListItems(analysisContent, [
+        '优点',
+        '强项',
+        'strengths',
+      ]);
 
       return {
         success: true,
         data: {
-          score: parsedResponse.score || 50,
+          score,
           issues,
-          strengths: Array.isArray(parsedResponse.strengths)
-            ? parsedResponse.strengths
-            : [],
-          summary: parsedResponse.summary || '代码分析完成',
+          strengths,
+          summary: analysisContent,
         },
-        usage: result.usage,
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0,
+        },
       };
     } catch (error) {
-      // 解析JSON失败，返回基本分析
+      this.logger.error(`DeepSeek分析代码失败: ${error.message}`);
       return {
-        success: true,
-        data: {
-          score: 50,
-          issues: [],
-          strengths: [],
-          summary: responseContent.trim(),
+        success: false,
+        error: {
+          code: 'analysis_failed',
+          message: `分析代码失败: ${error.message}`,
         },
-        usage: result.usage,
       };
     }
   }
 
   /**
-   * 计算Token使用量
+   * 优化代码
+   */
+  async optimizeCode(
+    code: string,
+    language: string,
+    options?: OptimizeCodeOptions,
+  ): Promise<
+    AiServiceResponse<{
+      optimizedCode: string;
+      changes: string[];
+      improvementSummary: string;
+    }>
+  > {
+    try {
+      // 使用辅助方法获取有效的模型名称
+      const model = this.getValidModel(options?.model);
+      const goals =
+        options?.optimizationGoals?.join(', ') || '提高性能、可读性和可维护性';
+
+      const systemMessage = `你是一位${language}代码优化专家，擅长改进代码质量和性能。`;
+      const userMessage = `请优化以下${language}代码，重点关注：${goals}:\n\`\`\`${language}\n${code}\n\`\`\`${
+        options?.context ? `\n上下文：${options.context}` : ''
+      }${options?.explanation ? '\n请详细解释做出的改进。' : ''}`;
+
+      const response = await this.chatCompletion({
+        model,
+        messages: [
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.2,
+      });
+
+      const optimizationContent = response.choices[0]?.message?.content || '';
+
+      // 提取优化后的代码和解释
+      const optimizedCode =
+        this.codeParser?.extractGeneratedCode(optimizationContent) ||
+        optimizationContent;
+      const improvementSummary =
+        this.codeParser?.extractExplanation(optimizationContent) || '';
+
+      // 提取具体改进
+      const changes = this.extractListItems(optimizationContent, [
+        '改进',
+        '更改',
+        '优化',
+        'changes',
+        'improvements',
+      ]);
+
+      return {
+        success: true,
+        data: {
+          optimizedCode,
+          changes,
+          improvementSummary,
+        },
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`DeepSeek优化代码失败: ${error.message}`);
+      return {
+        success: false,
+        error: {
+          code: 'optimization_failed',
+          message: `优化代码失败: ${error.message}`,
+        },
+      };
+    }
+  }
+
+  /**
+   * 聊天对话
+   */
+  async chat(
+    messages: string | Array<{ role: string; content: string }>,
+    options?: ChatOptions,
+  ): Promise<
+    AiServiceResponse<{
+      response: string;
+      conversationId: string;
+    }>
+  > {
+    try {
+      // 使用辅助方法获取有效的模型名称
+      const model = this.getValidModel(options?.model);
+
+      // 构建系统消息
+      let systemContent = `你是一位编程助手，擅长回答编程相关的问题，提供代码示例和问题解决方案。`;
+
+      if (options?.codeContext) {
+        systemContent += `\n\n以下是当前的代码上下文，你可以参考它来回答问题：\n\`\`\`\n${options.codeContext}\n\`\`\``;
+      }
+
+      if (options?.customPrompt) {
+        systemContent = options.customPrompt;
+      }
+
+      // 处理消息参数
+      let formattedMessages;
+      if (typeof messages === 'string') {
+        formattedMessages = [{ role: 'user', content: messages }];
+      } else {
+        formattedMessages = messages;
+      }
+
+      // 使用 options.history 如果存在
+      if (options?.history && options.history.length > 0) {
+        formattedMessages = [...options.history, ...formattedMessages];
+      }
+
+      // 添加系统消息
+      const allMessages = [
+        { role: 'system', content: systemContent },
+        ...formattedMessages,
+      ];
+
+      const response = await this.chatCompletion({
+        model,
+        messages: allMessages,
+        temperature: 0.7,
+      });
+
+      const responseContent = response.choices[0]?.message?.content || '';
+
+      // 生成唯一会话ID
+      const conversationId = `deepseek-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+
+      return {
+        success: true,
+        data: {
+          response: responseContent,
+          conversationId,
+        },
+        usage: {
+          promptTokens: response.usage?.prompt_tokens || 0,
+          completionTokens: response.usage?.completion_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`DeepSeek聊天失败: ${error.message}`);
+      return {
+        success: false,
+        error: {
+          code: 'chat_failed',
+          message: `聊天失败: ${error.message}`,
+        },
+      };
+    }
+  }
+
+  /**
+   * 计算Token使用量（简化版）
    */
   countTokens(input: string): number {
-    return this.tokenCounter.countTokens(input);
+    if (this.tokenCounter) {
+      return this.tokenCounter.countTokens(input, 'deepseek');
+    }
+
+    // 简单估算
+    return Math.ceil(input.length / 4);
+  }
+
+  /**
+   * 从文本中提取列表项
+   * @private
+   */
+  private extractListItems(text: string, markers: string[]): string[] {
+    const items: string[] = [];
+
+    // 查找可能的列表部分
+    for (const marker of markers) {
+      const regex = new RegExp(
+        `${marker}[：:](.*?)(?=\\n\\n|\\n[^\\n]|$)`,
+        'is',
+      );
+      const match = text.match(regex);
+
+      if (match) {
+        // 分割列表项
+        const listSection = match[1].trim();
+        const listItems = listSection
+          .split(/\n-|\n\d+\./)
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0);
+
+        items.push(...listItems);
+        break; // 找到一个匹配就退出
+      }
+    }
+
+    // 如果没找到特定结构，尝试匹配任何项目符号
+    if (items.length === 0) {
+      const bulletItems = text
+        .split(/\n-|\n\d+\./)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0 && item.length < 200); // 避免整段文本
+
+      items.push(...bulletItems);
+    }
+
+    return items;
   }
 }

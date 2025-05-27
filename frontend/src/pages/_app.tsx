@@ -1,6 +1,6 @@
 // frontend/src/pages/_app.tsx
 import type { AppProps } from 'next/app';
-import { ConfigProvider, theme } from 'antd';
+import { ConfigProvider, theme, App as AntApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { useRouter } from 'next/router';
 import { useEffect, useState, useRef } from 'react';
@@ -144,16 +144,20 @@ export default function App({ Component, pageProps }: AppProps) {
   if (authChecking) {
     return (
       <ConfigProvider locale={zhCN} theme={themeConfig}>
-        <GlobalLoading />
+        <AntApp>
+          <GlobalLoading />
+        </AntApp>
       </ConfigProvider>
     );
   }
 
   return (
     <ConfigProvider locale={zhCN} theme={themeConfig}>
-      <GlobalLoading />
-      <AppModel />
-      <Component {...pageProps} />
+      <AntApp>
+        <GlobalLoading />
+        <AppModel />
+        <Component {...pageProps} />
+      </AntApp>
     </ConfigProvider>
   );
 }

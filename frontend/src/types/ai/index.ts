@@ -113,6 +113,7 @@ export interface AIConfigParams {
   temperature?: number;
   maxTokens?: number;
   baseUrl?: string;
+  ollamaApiUrl?: string; // 添加Ollama API地址
   defaultSettings?: Record<string, any>;
 }
 
@@ -124,6 +125,7 @@ export interface AIConfigResponse {
   temperature: number;
   maxTokens: number;
   baseUrl?: string;
+  ollamaApiUrl?: string; // 添加Ollama API地址
   usageLimit?: {
     dailyTokenLimit: number;
     userTokenLimit: number;
@@ -135,6 +137,12 @@ export interface AIConfigResponse {
   monitoringEnabled: boolean;
   defaultSettings?: Record<string, any>;
   availableProviders?: string[];
+  availableModels?: Array<{
+    id: string;
+    name: string;
+    provider: string;
+    capabilities?: string[];
+  }>;
 }
 
 // AI配置测试参数
@@ -144,7 +152,27 @@ export interface AIConfigTestParams {
   apiKey: string;
   organization?: string;
   baseUrl?: string;
+  ollamaApiUrl?: string;
 }
+
+// AI提供商枚举
+export const AIProviderEnum = {
+  OPENAI: 'OpenAI',
+  AZURE: 'Azure',
+  ANTHROPIC: 'Anthropic',
+  DEEPSEEK: 'DeepSeek',
+  OLLAMA: 'Ollama', // 添加Ollama
+};
+
+// 添加AIProvider类型
+export type AIProvider = 'OpenAI' | 'DeepSeek' | 'Ollama';
+
+// 修改PRESET_MODELS定义
+export const PRESET_MODELS: Record<AIProvider, string[]> = {
+  OpenAI: ['gpt-3.5-turbo', 'gpt-4'],
+  DeepSeek: ['deepseek-chat', 'deepseek-reasoner'],
+  Ollama: ['deepseek-r1:1.5b', 'deepseek-coder:1.3b', 'codellama:13b', 'llama3:8b', 'mistral:7b', 'mixtral:8x7b', 'qwen:14b'],
+};
 
 // AI配置测试响应
 export interface AIConfigTestResponse {

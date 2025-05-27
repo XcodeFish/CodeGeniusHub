@@ -47,6 +47,7 @@ export interface AiServiceResponse<T> {
   error?: {
     code: string;
     message: string;
+    details?: any;
   };
   usage?: {
     promptTokens: number;

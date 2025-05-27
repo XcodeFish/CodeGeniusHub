@@ -110,6 +110,18 @@ request.interceptors.response.use(
     if (error.response) {
       // 请求已发出，但服务器响应状态码不在 2xx 范围内
       const status = error.response.status;
+      
+      // 特殊处理304状态码 - 使用缓存的内容
+      if (status === 304) {
+        console.log('资源未修改，使用缓存的内容');
+        // 返回一个成功的响应对象，避免进入错误处理流程
+        return Promise.resolve({
+          code: 0,
+          message: 'success',
+          data: error.response.data || {}  // 使用缓存的数据或空对象
+        });
+      }
+      
       switch (status) {
         case 401:
           message.error('会话已过期，请重新登录');

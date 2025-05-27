@@ -169,6 +169,14 @@ export const defaultMenus: Record<string, MenuItem[]> = {
           moduleIcon: 'Message',
           moduleOrder: 4,
           children: []
+        },
+        {
+          moduleId: 'ai-ollama',
+          moduleName: 'Ollama测试',
+          modulePath: '/ollama-test',
+          moduleIcon: 'CloudServer',
+          moduleOrder: 5,
+          children: []
         }
       ]
     }

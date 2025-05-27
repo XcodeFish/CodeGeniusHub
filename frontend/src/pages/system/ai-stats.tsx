@@ -37,13 +37,35 @@ function AIStats() {
         groupBy,
       };
 
-      const data = await aiService.getUsageStats(params);
-      setStatsData(data || {
-        totalTokens: 0,
-        totalCost: 0,
-        usageByDay: [],
-        usageByModel: []
-      });
+      let data: any = await aiService.getUsageStats(params);
+      
+      // 处理不同格式的响应数据
+      if (data && typeof data === 'object') {
+        // 如果返回了{count: 0}这样的格式
+        if (data.count !== undefined && Object.keys(data).length === 1) {
+          data = {
+            totalTokens: 0,
+            totalCost: 0,
+            usageByDay: [],
+            usageByModel: []
+          };
+        }
+        // 确保数据结构符合预期
+        if (!data.totalTokens) data.totalTokens = 0;
+        if (!data.totalCost) data.totalCost = 0;
+        if (!Array.isArray(data.usageByDay)) data.usageByDay = [];
+        if (!Array.isArray(data.usageByModel)) data.usageByModel = [];
+      } else {
+        // 如果返回的不是对象，使用默认值
+        data = {
+          totalTokens: 0,
+          totalCost: 0,
+          usageByDay: [],
+          usageByModel: []
+        };
+      }
+      
+      setStatsData(data);
     } catch (error) {
       console.error('获取AI使用统计失败:', error);
       setStatsData({
@@ -123,10 +145,23 @@ function AIStats() {
         },
       },
       tooltip: {
-        formatter: (datum: any) => {
-          return { name: 'Token使用量', value: `${datum.tokens.toLocaleString()} tokens` };
-        },
+        showMarkers: true,
+        customItems: (originalItems: any[]) => {
+          return originalItems.map(item => {
+            return {
+              name: 'Token使用量',
+              value: `${item.data.tokens.toLocaleString()} tokens`
+            };
+          });
+        }
       },
+      color: '#1890ff',
+      padding: 'auto',
+      appendPadding: [10, 0, 0, 0],
+      slider: {
+        start: 0,
+        end: 1,
+      }
     };
 
     return <Line {...config} />;
@@ -142,16 +177,37 @@ function AIStats() {
       data: statsData.usageByModel,
       angleField: 'tokens',
       colorField: 'model',
-      radius: 0.8,
+      radius: 0.7,
+      padding: 'auto',
       label: {
-        type: 'outer',
+        text: 'model',
+        position: 'outside',
       },
-      interactions: [{ type: 'element-active' }],
+      legend: {
+        position: 'right',
+      },
       tooltip: {
-        formatter: (datum: any) => {
-          return { name: datum.model, value: `${datum.tokens.toLocaleString()} tokens (${(datum.cost ? `$${datum.cost.toFixed(4)}` : '未计费')})` };
-        },
+        customItems: (originalItems: any[]) => {
+          return originalItems.map(item => {
+            return {
+              name: item.data.model,
+              value: `${item.data.tokens.toLocaleString()} tokens (${item.data.cost ? `$${item.data.cost.toFixed(4)}` : '未计费'})`
+            };
+          });
+        }
       },
+      statistic: {
+        title: false,
+        content: {
+          style: {
+            whiteSpace: 'pre-wrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontSize: '16px'
+          },
+          content: '总计',
+        },
+      }
     };
 
     return <Pie {...config} />;
@@ -166,7 +222,7 @@ function AIStats() {
               <LineChartOutlined /> AI使用统计
             </div>
           }
-          bordered={false}
+          variant="borderless"
           className={styles.card}
           extra={
             <div className={styles.filterControls}>

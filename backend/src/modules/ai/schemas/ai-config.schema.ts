@@ -8,6 +8,7 @@ export type AiProvider =
   | 'DeepSeek'
   | 'Baidu'
   | 'Zhipu'
+  | 'Ollama'
   | 'MiniMax';
 
 export interface IAiConfig {

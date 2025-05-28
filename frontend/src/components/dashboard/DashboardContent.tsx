@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Row, Col, Card, Statistic, Button, List, Typography } from 'antd';
 import { 
   ProjectOutlined, 
@@ -8,6 +8,9 @@ import {
   ArrowRightOutlined
 } from '@ant-design/icons';
 import styles from './dashboard.module.scss';
+import projectService from '@/services/project';
+import { ProjectBasic } from '@/types/project';
+import { useRouter } from 'next/router';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -15,12 +18,54 @@ const { Title, Text, Paragraph } = Typography;
  * 仪表盘首页内容组件
  */
 const DashboardContent: React.FC = () => {
-  // 示例数据，实际应从API获取
-  const recentProjects = [
-    { id: 1, name: '前端开发框架', lastUpdated: '2023-07-15', members: 5 },
-    { id: 2, name: '数据分析平台', lastUpdated: '2023-07-14', members: 3 },
-    { id: 3, name: '移动应用开发', lastUpdated: '2023-07-10', members: 4 },
-  ];
+  const router = useRouter();
+  const [projects, setProjects] = useState<ProjectBasic[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  
+  // 获取项目数据
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setLoading(true);
+        const projectsData = await projectService.getProjects();
+        setProjects(projectsData || []);
+      } catch (error) {
+        console.error('获取项目列表失败:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchProjects();
+  }, []);
+  
+  // 获取最近的3个项目
+  const recentProjects = projects.slice(0, 3).map(project => ({
+    id: project.id,
+    name: project.name,
+    lastUpdated: new Date(project.lastActivityAt || project.updatedAt).toLocaleDateString('zh-CN'),
+    members: project.membersCount || 0
+  }));
+  
+  // 计算统计数据
+  const projectCount = projects.length;
+  const totalMembers = projects.reduce((sum, project) => sum + (project.membersCount || 0), 0);
+  const totalFiles = projects.reduce((sum, project) => sum + (project.filesCount || 0), 0);
+  
+  // 处理创建新项目
+  const handleCreateProject = () => {
+    router.push('/project/create');
+  };
+  
+  // 查看所有项目
+  const handleViewAllProjects = () => {
+    router.push('/project');
+  };
+  
+  // 打开项目
+  const handleOpenProject = (projectId: string) => {
+    router.push(`/project/${projectId}`);
+  };
 
   return (
     <div className={styles.dashboardContainer}>
@@ -28,8 +73,8 @@ const DashboardContent: React.FC = () => {
         <Title level={2} className={styles.welcomeTitle}>欢迎来到 CodeGenius</Title>
         <Paragraph className={styles.welcomeText}>AI智能代码生成与协作平台，让编程更高效、协作更简单</Paragraph>
         <div className={styles.actionButtons}>
-          <Button type="primary" size="large">创建新项目</Button>
-          <Button type="primary" size="large">探索示例</Button>
+          <Button type="primary" size="large" onClick={handleCreateProject}>创建新项目</Button>
+          <Button size="large" onClick={handleViewAllProjects}>探索项目</Button>
         </div>
       </div>
       
@@ -38,7 +83,8 @@ const DashboardContent: React.FC = () => {
           <Card className={styles.statCard}>
             <Statistic 
               title="我的项目" 
-              value={8} 
+              value={projectCount} 
+              loading={loading}
               prefix={<ProjectOutlined />} 
             />
           </Card>
@@ -47,7 +93,8 @@ const DashboardContent: React.FC = () => {
           <Card className={styles.statCard}>
             <Statistic 
               title="团队成员" 
-              value={24} 
+              value={totalMembers} 
+              loading={loading}
               prefix={<TeamOutlined />} 
             />
           </Card>
@@ -56,7 +103,8 @@ const DashboardContent: React.FC = () => {
           <Card className={styles.statCard}>
             <Statistic 
               title="文件总数" 
-              value={156} 
+              value={totalFiles} 
+              loading={loading}
               prefix={<FileOutlined />} 
             />
           </Card>
@@ -64,9 +112,9 @@ const DashboardContent: React.FC = () => {
         <Col xs={24} sm={12} md={6}>
           <Card className={styles.statCard}>
             <Statistic 
-              title="活跃时间" 
-              value={128} 
-              suffix="小时"
+              title="活跃项目" 
+              value={projects.filter(p => !p.isArchived).length}
+              loading={loading}
               prefix={<ClockCircleOutlined />} 
             />
           </Card>
@@ -76,25 +124,32 @@ const DashboardContent: React.FC = () => {
       <Card 
         title="最近项目" 
         className={styles.projectsCard}
-        extra={<Button type="link" icon={<ArrowRightOutlined />}>查看全部</Button>}
+        loading={loading}
+        extra={<Button type="link" icon={<ArrowRightOutlined />} onClick={handleViewAllProjects}>查看全部</Button>}
       >
-        <List
-          itemLayout="horizontal"
-          dataSource={recentProjects}
-          renderItem={(item) => (
-            <List.Item
-              actions={[
-                <Button type="link" key="open">打开</Button>,
-                <Button type="text" key="detail">详情</Button>
-              ]}
-            >
-              <List.Item.Meta
-                title={<a href={`/projects/${item.id}`}>{item.name}</a>}
-                description={`最后更新: ${item.lastUpdated} · ${item.members} 成员`}
-              />
-            </List.Item>
-          )}
-        />
+        {recentProjects.length > 0 ? (
+          <List
+            itemLayout="horizontal"
+            dataSource={recentProjects}
+            renderItem={(item) => (
+              <List.Item
+                actions={[
+                  <Button type="link" key="open" onClick={() => handleOpenProject(item.id)}>打开</Button>
+                ]}
+              >
+                <List.Item.Meta
+                  title={<a onClick={() => handleOpenProject(item.id)}>{item.name}</a>}
+                  description={`最后更新: ${item.lastUpdated} · ${item.members} 成员`}
+                />
+              </List.Item>
+            )}
+          />
+        ) : (
+          <div className={styles.emptyProjects}>
+            <p>暂无项目</p>
+            <Button type="primary" onClick={handleCreateProject}>创建第一个项目</Button>
+          </div>
+        )}
       </Card>
     </div>
   );

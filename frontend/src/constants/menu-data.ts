@@ -28,7 +28,7 @@ export const defaultMenus: Record<string, MenuItem[]> = {
         {
           moduleId: 'project-list',
           moduleName: '项目列表',
-          modulePath: '/project/list',
+          modulePath: '/project',
           moduleIcon: 'UnorderedList',
           moduleOrder: 1,
           children: []

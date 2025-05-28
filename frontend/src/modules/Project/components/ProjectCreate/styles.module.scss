@@ -1,0 +1,35 @@
+.projectCreateContainer {
+  padding: 24px;
+  
+  .header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 24px;
+    
+    .backButton {
+      margin-right: 16px;
+    }
+    
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+  }
+  
+  .formCard {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  
+  .formButtons {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 24px;
+    margin-bottom: 0;
+    
+    .cancelButton {
+      margin-right: 16px;
+    }
+  }
+} 

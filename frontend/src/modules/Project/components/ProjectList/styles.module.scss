@@ -1,0 +1,46 @@
+.projectListContainer {
+  padding: 24px;
+  
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+  }
+  
+  .loadingContainer {
+    padding: 24px;
+  }
+  
+  .emptyContainer {
+    margin: 40px 0;
+  }
+  
+  .projectCard {
+    height: 200px;
+    display: flex;
+    flex-direction: column;
+    
+    .projectDescription {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      color: rgba(0, 0, 0, 0.65);
+      margin-bottom: 16px;
+    }
+    
+    .projectMeta {
+      color: rgba(0, 0, 0, 0.45);
+      font-size: 12px;
+    }
+  }
+} 

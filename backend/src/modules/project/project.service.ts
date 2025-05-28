@@ -61,7 +61,7 @@ export class ProjectService {
       members: [
         {
           userId: userId,
-          role: Permission.ADMIN,
+          permission: Permission.ADMIN,
           joinedAt: new Date(),
         },
       ],
@@ -727,6 +727,7 @@ export class ProjectService {
    * @returns 成员列表
    */
   async getProjectMembers(projectId: string): Promise<any[]> {
+    // 获取项目信息，包括成员
     const project = await this.projectModel
       .findById(projectId)
       .populate('members.userId', 'username email avatar')
@@ -736,7 +737,31 @@ export class ProjectService {
       throw new NotFoundException('项目不存在');
     }
 
-    return project.members;
+    // 获取项目创建者ID
+    const creatorId = String(project.createdBy);
+
+    // 简单粗暴，直接强制转换每个成员，跳过TypeScript检查
+    return (project.members as any[]).map((member) => {
+      // 从填充的userId中提取数据
+      const userData = member.userId as any;
+      const id =
+        userData && userData._id ? String(userData._id) : String(userData);
+
+      // 判断是否为项目创建者
+      const isCreator = id === creatorId;
+
+      // 返回前端所需的格式
+      return {
+        user: {
+          id,
+          username: userData && userData.username ? userData.username : '',
+          email: userData && userData.email ? userData.email : '',
+          avatar: userData && userData.avatar ? userData.avatar : undefined,
+        },
+        permission: isCreator ? Permission.ADMIN : member.permission,
+        joinedAt: member.joinedAt,
+      };
+    });
   }
 
   /**

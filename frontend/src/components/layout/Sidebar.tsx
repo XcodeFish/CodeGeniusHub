@@ -22,6 +22,9 @@ type MenuItem = {
   onClick?: (e?: any) => void;
 };
 
+// 用于本地存储菜单打开状态的key
+const MENU_OPEN_KEYS_STORAGE_KEY = 'codegenius_menu_open_keys';
+
 /**
  * 侧边栏导航组件
  */
@@ -40,6 +43,17 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
   // 组件挂载时获取菜单数据
   useEffect(() => {
     fetchMenus();
+    
+    // 从本地存储中恢复菜单打开状态
+    const savedOpenKeys = localStorage.getItem(MENU_OPEN_KEYS_STORAGE_KEY);
+    if (savedOpenKeys) {
+      try {
+        const parsedOpenKeys = JSON.parse(savedOpenKeys);
+        setMenuOpenKeys(parsedOpenKeys);
+      } catch (e) {
+        console.error('解析存储的菜单状态失败:', e);
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 移除fetchMenus依赖，只在组件挂载时获取一次菜单数据
 
@@ -110,6 +124,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
     // 根路径特殊处理
     if (pathSegments.length === 0) return { selectedKeys: ['dashboard'], openKeys: [] };
     
+    // 特殊路径映射处理
+    if (pathSegments[0] === 'project' && pathSegments.length === 1) {
+      // 当路径是/project时，选中project-list子菜单
+      return { 
+        selectedKeys: ['project-list'], 
+        openKeys: ['project'] 
+      };
+    }
+    
     // 一级菜单
     if (pathSegments.length === 1) {
       return { 
@@ -136,13 +159,21 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed }) => {
   // 初始设置打开的菜单项
   useEffect(() => {
     if (!collapsed && openKeys.length > 0) {
-      setMenuOpenKeys(openKeys);
+      setMenuOpenKeys((prevKeys) => {
+        // 合并现有打开的菜单和路由匹配的菜单，避免重复
+        const combinedKeys = Array.from(new Set([...prevKeys, ...openKeys]));
+        // 保存到本地存储
+        localStorage.setItem(MENU_OPEN_KEYS_STORAGE_KEY, JSON.stringify(combinedKeys));
+        return combinedKeys;
+      });
     }
-  }, [path, collapsed]);
+  }, [path, collapsed, openKeys]);
   
   // 处理菜单展开/折叠
   const handleOpenChange = (newOpenKeys: string[]) => {
     setMenuOpenKeys(newOpenKeys);
+    // 保存菜单展开状态到本地存储
+    localStorage.setItem(MENU_OPEN_KEYS_STORAGE_KEY, JSON.stringify(newOpenKeys));
   };
 
   return (

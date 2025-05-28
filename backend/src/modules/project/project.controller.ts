@@ -407,7 +407,10 @@ export class ProjectController {
     @Param('projectId') projectId: string,
     @Request() req,
   ): Promise<any[]> {
-    await this.permissionService.validateProjectAccess(req.user.id, projectId);
+    await this.permissionService.validateProjectAccess(
+      req.user.userId,
+      projectId,
+    );
     return this.projectService.getProjectMembers(projectId);
   }
 
@@ -444,7 +447,7 @@ export class ProjectController {
     @Request() req,
   ): Promise<ProjectDetailResponseDto> {
     await this.permissionService.validateProjectManageAccess(
-      req.user.id,
+      req.user.userId,
       projectId,
     );
 
@@ -453,7 +456,7 @@ export class ProjectController {
       userId,
       projectId,
       permission,
-      req.user.id,
+      req.user.userId,
     );
 
     // 更新项目成员列表
@@ -499,7 +502,7 @@ export class ProjectController {
     @Request() req,
   ): Promise<ProjectDetailResponseDto> {
     await this.permissionService.validateProjectManageAccess(
-      req.user.id,
+      req.user.userId,
       projectId,
     );
 
@@ -508,7 +511,7 @@ export class ProjectController {
       userId,
       projectId,
       permission,
-      req.user.id,
+      req.user.userId,
     );
 
     // 更新项目成员列表
@@ -540,7 +543,7 @@ export class ProjectController {
     @Request() req,
   ): Promise<ProjectDetailResponseDto> {
     await this.permissionService.validateProjectManageAccess(
-      req.user.id,
+      req.user.userId,
       projectId,
     );
 
@@ -600,7 +603,7 @@ export class ProjectController {
     @Request() req,
   ): Promise<ProjectDetailResponseDto> {
     await this.permissionService.validateProjectManageAccess(
-      req.user.id,
+      req.user.userId,
       projectId,
     );
 
@@ -608,7 +611,7 @@ export class ProjectController {
     await this.permissionService.batchUpdateProjectPermissions(
       projectId,
       members,
-      req.user.id,
+      req.user.userId,
     );
 
     // 更新项目成员列表
@@ -660,7 +663,7 @@ export class ProjectController {
     const members = project.members
       ? project.members.map((member) => ({
           user: member.userId, // 假设已经通过populate获取了用户信息
-          role: member.role,
+          permission: member.permission, // 修正: 使用正确的permission字段, 而不是错误的role字段
           joinedAt: member.joinedAt,
         }))
       : [];
